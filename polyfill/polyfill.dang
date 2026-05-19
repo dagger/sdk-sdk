@@ -7,7 +7,7 @@ type Polyfill {
   """
   pub workspace(ws: Workspace!): PolyfillWorkspace! {
     PolyfillWorkspace(
-      wsID: toJSON(ws.id),
+      ws: ws,
       cwd: PolyfillWorkspaceCwd().path(ws),
     )
   }

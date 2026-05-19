@@ -1,0 +1,221 @@
+"""
+Lightweight black-box testing helpers for Dagger modules.
+"""
+type ModTest {
+  """
+  Return a black-box test target for a workspace-rooted module directory view.
+  """
+  pub target(workspaceView: Directory!, sourceRootPath: String!): ModTestTarget! {
+    ModTestTarget(
+      workspaceView: workspaceView,
+      sourceRootPath: sourceRootPath,
+      timeout: "5m",
+    )
+  }
+}
+
+"""
+A Dagger module under black-box test.
+"""
+type ModTestTarget {
+  let workspaceView: Directory!
+  let sourceRootPath: String!
+  let timeout: String!
+
+  """
+  Return a copy of this target with a different command timeout.
+  """
+  pub withTimeout(timeout: String!): ModTestTarget! {
+    ModTestTarget(
+      workspaceView: workspaceView,
+      sourceRootPath: sourceRootPath,
+      timeout: timeout,
+    )
+  }
+
+  """
+  Run `dagger call -j` against the target module and require success.
+  """
+  pub call(args: [String!]!): ModTestCall! {
+    let result = callWithExpect(args)
+    result.assertSuccess
+    result
+  }
+
+  """
+  Run `dagger call -j` against the target module and capture failures.
+  """
+  pub tryCall(args: [String!]!): ModTestCall! {
+    callWithExpect(args)
+  }
+
+  """
+  Assert that a target call exits successfully.
+  """
+  pub assertSuccess(args: [String!]!, message: String! = "dagger call should succeed"): Void {
+    let result = tryCall(args)
+    if (result.succeeded == false) {
+      raise message + "\nargs: " + toJSON(args) + "\nexit code: " + result.exitCode + "\nstderr:\n" + result.stderr
+    }
+    null
+  }
+
+  """
+  Assert that a target call exits with a non-zero status.
+  """
+  pub assertFailure(args: [String!]!, message: String! = "dagger call should fail"): Void {
+    let result = tryCall(args)
+    if (result.succeeded) {
+      raise message + "\nargs: " + toJSON(args)
+    }
+    null
+  }
+
+  """
+  Assert that a target call's raw stdout exactly matches the expected output.
+  """
+  pub assertOutput(args: [String!]!, want: String!, message: String! = "unexpected dagger call stdout"): Void {
+    let got = call(args).stdout
+    assert(got == want, message + "\nargs: " + toJSON(args) + "\nwant:\n" + want + "\ngot:\n" + got)
+  }
+
+  """
+  Assert that a target call's JSON stdout exactly matches the expected JSON.
+  """
+  pub assertJsonOutput(args: [String!]!, want: String!, message: String! = "unexpected dagger call JSON stdout"): Void {
+    let got = call(args).stdout.trimSuffix("\n")
+    assert(got == want, message + "\nargs: " + toJSON(args) + "\nwant JSON:\n" + want + "\ngot JSON:\n" + got)
+  }
+
+  """
+  Assert that a target call returns the expected JSON string.
+  """
+  pub assertJsonString(args: [String!]!, want: String!, message: String! = "unexpected dagger call JSON string"): Void {
+    assertJsonOutput(args, toJSON(want), message)
+  }
+
+  """
+  Assert that a target call's JSON string output contains the expected substring.
+  """
+  pub assertJsonStringContains(args: [String!]!, want: String!, message: String! = "JSON string output did not contain expected text"): Void {
+    let got = call(args).stdout
+    let encoded = toJSON(want).trimPrefix("\"").trimSuffix("\"")
+    assert(got.contains(encoded), message + "\nargs: " + toJSON(args) + "\nwant substring:\n" + want + "\ngot JSON:\n" + got)
+  }
+
+  """
+  Assert that a target call's JSON string list output is empty.
+  """
+  pub assertJsonListEmpty(args: [String!]!, message: String! = "JSON list output should be empty"): Void {
+    assertJsonOutput(args, "[]", message)
+  }
+
+  """
+  Assert that a target call's JSON string list output contains the expected string.
+  """
+  pub assertJsonListContains(args: [String!]!, want: String!, message: String! = "JSON list output did not contain expected string"): Void {
+    let got = call(args).stdout
+    let encoded = toJSON(want)
+    assert(got.contains(encoded), message + "\nargs: " + toJSON(args) + "\nwant string:\n" + want + "\ngot JSON:\n" + got)
+  }
+
+  """
+  Run `dagger call -j` against the target module.
+  """
+  let callWithExpect(args: [String!]!): ModTestCall! {
+    ModTestCall(
+      container: runner.withExec(
+        [
+          "sh",
+          "-c",
+          "mkdir -p /tmp/mod-test; timeout_arg=$1; module=$2; shift 2; timeout \"$timeout_arg\" /usr/local/bin/dagger --progress plain call -j -m \"$module\" \"$@\" > /tmp/mod-test/stdout 2> /tmp/mod-test/stderr; code=$?; printf '%s' \"$code\" > /tmp/mod-test/exit-code; exit 0",
+          "mod-test-run",
+          timeout,
+          "/work/" + sourceRootPath,
+        ] + args,
+        experimentalPrivilegedNesting: true,
+      ),
+      args: args,
+    )
+  }
+
+  """
+  Fail when a condition is false.
+  """
+  let assert(condition: Boolean!, message: String!): Void {
+    if (condition == false) {
+      raise message
+    }
+    null
+  }
+
+  """
+  Container with a pinned Dagger CLI and the target module context mounted.
+  """
+  let runner: Container! {
+    container
+      .from("golang:1.25-alpine")
+      .withoutEntrypoint
+      .withFile("/usr/local/bin/dagger", daggerCli.binary)
+      .withExec(["chmod", "+x", "/usr/local/bin/dagger"])
+      .withMountedDirectory("/work", workspaceView)
+      .withWorkdir("/work")
+      .withEnvVariable("DAGGER_TRACE_URL", cloud.traceURL)
+  }
+}
+
+"""
+Result of a black-box module CLI call.
+"""
+type ModTestCall {
+  let container: Container!
+  let args: [String!]!
+
+  """
+  The command stdout.
+  """
+  pub stdout: String! {
+    container.file("/tmp/mod-test/stdout").contents
+  }
+
+  """
+  The command stderr.
+  """
+  pub stderr: String! {
+    container.file("/tmp/mod-test/stderr").contents
+  }
+
+  """
+  The command exit code as decimal text.
+  """
+  pub exitCode: String! {
+    container.file("/tmp/mod-test/exit-code").contents
+  }
+
+  """
+  Whether the command exited successfully.
+  """
+  pub succeeded: Boolean! {
+    exitCode == "0"
+  }
+
+  """
+  Fail when the command did not exit successfully.
+  """
+  pub assertSuccess: Void {
+    if (succeeded == false) {
+      raise "dagger call failed: " + toJSON(args) + "\nexit code: " + exitCode + "\nstderr:\n" + stderr
+    }
+    null
+  }
+
+  """
+  Fail when the command exited successfully.
+  """
+  pub assertFailure: Void {
+    if (succeeded) {
+      raise "dagger call unexpectedly succeeded: " + toJSON(args)
+    }
+    null
+  }
+}

@@ -2,7 +2,7 @@
 Polyfill implementation of module source operations needed by SDK development.
 """
 type PolyfillModuleSource {
-  let wsID: String!
+  let ws: Workspace!
   let cwd: String!
   let path: String!
 
@@ -12,7 +12,7 @@ type PolyfillModuleSource {
   pub config: PolyfillModuleConfig! {
     let configContents = PolyfillWorkspaceSnapshot().existingFile(wsID, configPath, configPath).file(configPath).contents
     PolyfillModuleConfig(
-      wsID: wsID,
+      ws: ws,
       cwd: cwd,
       path: path,
       originalContents: configContents,
@@ -21,10 +21,51 @@ type PolyfillModuleSource {
   }
 
   """
+  Return this module source as a core ModuleSource.
+  """
+  pub core: ModuleSource! {
+    loadModuleSourceFromID(moduleSourceID :: ModuleSourceID!)
+  }
+
+  """
+  Return a filtered workspace-rooted directory view containing the files required
+  to load this module source.
+  """
+  pub workspaceView: Directory! {
+    PolyfillGeneration().workspaceModuleSourceView(
+      wsID,
+      path,
+      cwd: ".",
+      local: true,
+    )
+  }
+
+  """
+  Return the module source root path inside the workspace view.
+  """
+  pub sourceRootPath: String! {
+    path
+  }
+
+  """
+  Load this module source as a core Module.
+  """
+  pub module: Module! {
+    core.asModule
+  }
+
+  """
+  Return this module source's introspection schema file.
+  """
+  pub introspectionSchemaJSON: File! {
+    module.introspectionSchemaJSON
+  }
+
+  """
   Generate files for this module source, and return staged workspace changes.
   """
   pub generate: PolyfillWorkspaceFork! {
-    let fork = PolyfillWorkspace(wsID: wsID, cwd: cwd).fork
+    let fork = PolyfillWorkspace(ws: ws, cwd: cwd).fork
     let generated = PolyfillGeneration().workspaceModuleGeneratedContext(
       wsID,
       path,
@@ -42,16 +83,29 @@ type PolyfillModuleSource {
   let configPath: String! {
     if (path == ".") { "dagger.json" } else { path + "/dagger.json" }
   }
+
+  let wsID: String! {
+    toJSON(ws.id)
+  }
+
+  let moduleSourceID: String! {
+    PolyfillGeneration().workspaceModuleSourceID(
+      wsID,
+      path,
+      cwd: ".",
+      local: true,
+    )
+  }
 }
 
 type PolyfillGeneration {
   """
   Return generated context directories for an existing workspace module.
 
-  Temporary workaround: source construction currently happens in a nested Go
-  helper because module-side source loading loses caller workspace context.
-  Delete this helper once the engine exposes a reliable workspace module source
-  API usable directly from Dang.
+  Temporary workaround: generated-context construction currently happens in a
+  nested Go helper because the SDK generation path still needs host workspace
+  snapshot behavior. Delete this helper once the engine exposes a direct API
+  usable from Dang.
   """
   let workspaceModuleGeneratedContext(
     wsID: String!,
@@ -82,6 +136,66 @@ type PolyfillGeneration {
       before: output.directory("/before"),
       after: output.directory("/after"),
     )
+  }
+
+  """
+  Return the core ModuleSource ID for an existing workspace module.
+  """
+  let workspaceModuleSourceID(
+    wsID: String!,
+    ref: String!,
+    cwd: String! = "",
+    local: Boolean! = false,
+  ): String! {
+    let cwdFlags = if (cwd == "") { [] } else { ["--cwd", cwd] }
+    let localFlags = if (local) { ["--local"] } else { [] }
+
+    container
+      .from("golang:1.25-alpine")
+      .withoutEntrypoint
+      .withMountedCache("/go/pkg/mod", cacheVolume("go-mod"))
+      .withMountedCache("/root/.cache/go-build", cacheVolume("go-build"))
+      .withDirectory("/helper", currentModule.source.directory("helpers/workspace-module-generate"))
+      .withWorkdir("/helper")
+      .withExec(["go", "build", "-o", "/usr/local/bin/workspace-module-generate", "."])
+      .withEnvVariable("DAGGER_TRACE_URL", cloud.traceURL)
+      .withEnvVariable("WORKSPACE_ID", wsID)
+      .withExec(
+        ["workspace-module-generate", "--id-out", "/module-source.id"] + cwdFlags + localFlags + [ref],
+        experimentalPrivilegedNesting: true,
+      )
+      .file("/module-source.id")
+      .contents
+  }
+
+  """
+  Return the filtered workspace-rooted directory needed to load an existing
+  workspace module source.
+  """
+  let workspaceModuleSourceView(
+    wsID: String!,
+    ref: String!,
+    cwd: String! = "",
+    local: Boolean! = false,
+  ): Directory! {
+    let cwdFlags = if (cwd == "") { [] } else { ["--cwd", cwd] }
+    let localFlags = if (local) { ["--local"] } else { [] }
+
+    container
+      .from("golang:1.25-alpine")
+      .withoutEntrypoint
+      .withMountedCache("/go/pkg/mod", cacheVolume("go-mod"))
+      .withMountedCache("/root/.cache/go-build", cacheVolume("go-build"))
+      .withDirectory("/helper", currentModule.source.directory("helpers/workspace-module-generate"))
+      .withWorkdir("/helper")
+      .withExec(["go", "build", "-o", "/usr/local/bin/workspace-module-generate", "."])
+      .withEnvVariable("DAGGER_TRACE_URL", cloud.traceURL)
+      .withEnvVariable("WORKSPACE_ID", wsID)
+      .withExec(
+        ["workspace-module-generate", "--view-out", "/workspace-view"] + cwdFlags + localFlags + [ref],
+        experimentalPrivilegedNesting: true,
+      )
+      .directory("/workspace-view")
   }
 }
 

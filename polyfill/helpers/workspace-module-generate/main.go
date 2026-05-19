@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -15,13 +16,15 @@ import (
 const workspaceIDEnv = "WORKSPACE_ID"
 
 type moduleSourceOptions struct {
-	ref    string
-	cwd    string
-	local  bool
-	name   string
-	root   string
-	before string
-	after  string
+	ref     string
+	cwd     string
+	local   bool
+	name    string
+	root    string
+	before  string
+	after   string
+	idOut   string
+	viewOut string
 }
 
 func main() {
@@ -49,12 +52,33 @@ func run(ctx context.Context) error {
 	}
 	workspace := client.LoadWorkspaceFromID(dagger.WorkspaceID(workspaceID))
 
+	if opts.viewOut != "" {
+		view, err := moduleSourceWorkspaceView(ctx, workspace, opts)
+		if err != nil {
+			return err
+		}
+		if _, err := view.Export(ctx, opts.viewOut); err != nil {
+			return fmt.Errorf("export module source workspace view: %w", err)
+		}
+		return nil
+	}
+
 	src, err := moduleSource(ctx, client, workspace, opts)
 	if err != nil {
 		return err
 	}
 	if opts.name != "" {
 		src = src.WithName(opts.name)
+	}
+	if opts.idOut != "" {
+		id, err := src.ID(ctx)
+		if err != nil {
+			return fmt.Errorf("resolve module source id: %w", err)
+		}
+		if err := os.MkdirAll(filepath.Dir(opts.idOut), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(opts.idOut, []byte(id), 0o644)
 	}
 
 	changes := src.GeneratedContextChangeset()
@@ -73,7 +97,7 @@ func parseModuleSourceOptions(args []string, wantPositionals int) (moduleSourceO
 		return opts, err
 	}
 	if len(rest) != wantPositionals {
-		return opts, fmt.Errorf("usage: workspace-module-generate REF [--cwd CWD] [--local] [--name NAME] [--root ROOT] [--before PATH] [--after PATH]")
+		return opts, fmt.Errorf("usage: workspace-module-generate REF [--cwd CWD] [--local] [--name NAME] [--root ROOT] [--before PATH] [--after PATH] [--id-out PATH] [--view-out PATH]")
 	}
 	opts.ref = rest[0]
 	if opts.root == "" {
@@ -136,6 +160,22 @@ func parseOptions(args []string) (moduleSourceOptions, []string, error) {
 			opts.after = args[i]
 		case strings.HasPrefix(arg, "--after="):
 			opts.after = strings.TrimPrefix(arg, "--after=")
+		case arg == "--id-out":
+			i++
+			if i >= len(args) {
+				return opts, nil, fmt.Errorf("--id-out requires a value")
+			}
+			opts.idOut = args[i]
+		case strings.HasPrefix(arg, "--id-out="):
+			opts.idOut = strings.TrimPrefix(arg, "--id-out=")
+		case arg == "--view-out":
+			i++
+			if i >= len(args) {
+				return opts, nil, fmt.Errorf("--view-out requires a value")
+			}
+			opts.viewOut = args[i]
+		case strings.HasPrefix(arg, "--view-out="):
+			opts.viewOut = strings.TrimPrefix(arg, "--view-out=")
 		case strings.HasPrefix(arg, "-"):
 			return opts, nil, fmt.Errorf("unknown option: %s", arg)
 		default:
@@ -187,6 +227,40 @@ func moduleSource(
 	}), nil
 }
 
+func moduleSourceWorkspaceView(
+	ctx context.Context,
+	workspace *dagger.Workspace,
+	opts moduleSourceOptions,
+) (*dagger.Directory, error) {
+	cwd := opts.cwd
+	if cwd == "" {
+		var err error
+		cwd, err = currentWorkspacePath(ctx, workspace)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	candidate, err := workspacePath(cwd, opts.ref)
+	if err != nil {
+		return nil, err
+	}
+
+	local, err := workspaceDirectoryExists(ctx, workspace, candidate)
+	if err != nil {
+		return nil, err
+	}
+	if !local {
+		return nil, fmt.Errorf("local module source %q does not exist in workspace at %q", opts.ref, candidate)
+	}
+
+	include, err := workspaceModuleSourceInclude(ctx, workspace, candidate)
+	if err != nil {
+		return nil, err
+	}
+	return workspace.Directory("/", dagger.WorkspaceDirectoryOpts{Include: include}), nil
+}
+
 func workspaceDirectoryExists(ctx context.Context, workspace *dagger.Workspace, p string) (bool, error) {
 	p, err := clean(p)
 	if err != nil {
@@ -205,37 +279,30 @@ func workspaceModuleSourceInclude(
 	workspace *dagger.Workspace,
 	modulePath string,
 ) ([]string, error) {
-	configDir := workspace.Directory("/", dagger.WorkspaceDirectoryOpts{
-		Include: []string{"**/dagger.json"},
-	})
-	configPaths, err := configDir.Glob(ctx, "**/dagger.json")
-	if err != nil {
-		return nil, err
-	}
-	rootConfig, err := configDir.Exists(ctx, "dagger.json", dagger.DirectoryExistsOpts{
-		ExpectedType: dagger.ExistsTypeRegularType,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if rootConfig && !contains(configPaths, "dagger.json") {
-		configPaths = append(configPaths, "dagger.json")
-	}
-
-	configs := map[string]sourceConfig{}
-	for _, configPath := range configPaths {
+	return moduleSourceInclude(ctx, modulePath, func(ctx context.Context, p string) (sourceConfig, bool, error) {
+		configPath := daggerJSONPath(p)
+		configDir := workspace.Directory("/", dagger.WorkspaceDirectoryOpts{
+			Include: []string{configPath},
+		})
+		ok, err := configDir.Exists(ctx, configPath, dagger.DirectoryExistsOpts{
+			ExpectedType: dagger.ExistsTypeRegularType,
+		})
+		if err != nil {
+			return sourceConfig{}, false, err
+		}
+		if !ok {
+			return sourceConfig{}, false, nil
+		}
 		contents, err := configDir.File(configPath).Contents(ctx)
 		if err != nil {
-			return nil, err
+			return sourceConfig{}, false, err
 		}
 		config, err := parseSourceConfig(contents)
 		if err != nil {
-			return nil, fmt.Errorf("parse %s: %w", configPath, err)
+			return sourceConfig{}, true, fmt.Errorf("parse %s: %w", configPath, err)
 		}
-		configs[configPath] = config
-	}
-
-	return moduleSourceIncludeFromConfigs(configs, modulePath)
+		return config, true, nil
+	})
 }
 
 type sourceConfig struct {
@@ -244,6 +311,15 @@ type sourceConfig struct {
 }
 
 func moduleSourceIncludeFromConfigs(configs map[string]sourceConfig, modulePath string) ([]string, error) {
+	return moduleSourceInclude(context.Background(), modulePath, func(_ context.Context, p string) (sourceConfig, bool, error) {
+		config, ok := configs[daggerJSONPath(p)]
+		return config, ok, nil
+	})
+}
+
+type sourceConfigReader func(context.Context, string) (sourceConfig, bool, error)
+
+func moduleSourceInclude(ctx context.Context, modulePath string, readConfig sourceConfigReader) ([]string, error) {
 	include := map[string]struct{}{}
 	seen := map[string]struct{}{}
 	var visit func(string) error
@@ -257,10 +333,12 @@ func moduleSourceIncludeFromConfigs(configs map[string]sourceConfig, modulePath 
 		}
 		seen[p] = struct{}{}
 
-		configPath := daggerJSONPath(p)
-		config, ok := configs[configPath]
+		config, ok, err := readConfig(ctx, p)
+		if err != nil {
+			return err
+		}
 		if !ok {
-			return nil
+			return fmt.Errorf("module source dagger.json not found: %s", daggerJSONPath(p))
 		}
 
 		if p == "." {
@@ -269,7 +347,7 @@ func moduleSourceIncludeFromConfigs(configs map[string]sourceConfig, modulePath 
 			include["**"] = struct{}{}
 		} else {
 			include[p] = struct{}{}
-			include[configPath] = struct{}{}
+			include[daggerJSONPath(p)] = struct{}{}
 			include[path.Join(p, "**")] = struct{}{}
 		}
 
@@ -347,15 +425,6 @@ func daggerJSONPath(modulePath string) string {
 		return "dagger.json"
 	}
 	return path.Join(modulePath, "dagger.json")
-}
-
-func contains(values []string, needle string) bool {
-	for _, value := range values {
-		if value == needle {
-			return true
-		}
-	}
-	return false
 }
 
 func workspacePath(cwd, ref string) (string, error) {

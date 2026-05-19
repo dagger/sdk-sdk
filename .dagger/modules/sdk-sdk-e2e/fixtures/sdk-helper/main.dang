@@ -1,0 +1,103 @@
+"""
+Minimal SDK helper fixture used to run sdk-sdk's black-box checks end-to-end.
+"""
+type SdkHelperFixture {
+  """
+  Stage a new module dagger.json.
+  """
+  pub init(
+    ws: Workspace!,
+    name: String!,
+    path: String! = "",
+    template: String! = "",
+    ignoreGenerated: Boolean! = false,
+  ): Changeset! {
+    let modulePath = if (path == "") {
+      ".dagger/modules/" + name
+    } else {
+      path
+    }
+
+    directory
+      .withNewFile(modulePath + "/dagger.json", moduleConfig(name))
+      .changes(directory)
+  }
+
+  """
+  Return a module handle.
+  """
+  pub mod(ws: Workspace!, path: String! = ".", findUp: Boolean! = true): SdkHelperFixtureMod! {
+    SdkHelperFixtureMod(
+      ws: ws,
+      modulePath: path,
+    )
+  }
+
+  """
+  Return the contents for a generated dagger.json.
+  """
+  let moduleConfig(name: String!): String! {
+    "{\n  \"name\": \"" + name + "\",\n  \"sdk\": {\n    \"source\": \"dang\"\n  }\n}\n"
+  }
+}
+
+"""
+Minimal module handle.
+"""
+type SdkHelperFixtureMod {
+  let ws: Workspace!
+  let modulePath: String!
+
+  """
+  Module path relative to the current workspace.
+  """
+  pub path: String! {
+    modulePath
+  }
+
+  """
+  Canonical dependency manager.
+  """
+  pub dependencies: SdkHelperFixtureDependencies! {
+    SdkHelperFixtureDependencies(ws: ws)
+  }
+
+  """
+  Temporary Go SDK alias accepted by sdk-sdk.
+  """
+  pub deps: SdkHelperFixtureDependencies! {
+    dependencies
+  }
+}
+
+"""
+Minimal dependency manager.
+"""
+type SdkHelperFixtureDependencies {
+  let ws: Workspace!
+
+  """
+  Return configured dependency names.
+  """
+  pub list: [String!]! {
+    []
+  }
+
+  """
+  Stage a named dependency in dagger.json.
+  """
+  pub add(source: String!, name: String! = ""): Changeset! {
+    let updated = "{\n  \"name\": \"sdk-helper-fixture\",\n  \"engineVersion\": \"v0.20.8\",\n  \"sdk\": {\n    \"source\": \"dang\"\n  },\n  \"dependencies\": [\n    {\n      \"name\": \"" + name + "\",\n      \"source\": \"" + source + "\"\n    }\n  ]\n}\n"
+
+    directory
+      .withNewFile("dagger.json", updated)
+      .changes(directory.withNewFile("dagger.json", originalConfig))
+  }
+
+  """
+  Return the fixture's original dagger.json contents.
+  """
+  let originalConfig: String! {
+    "{\n  \"name\": \"sdk-helper-fixture\",\n  \"engineVersion\": \"v0.20.8\",\n  \"sdk\": {\n    \"source\": \"dang\"\n  }\n}\n"
+  }
+}

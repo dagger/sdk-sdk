@@ -1,0 +1,7 @@
+{
+  "name": "sdk-helper-fixture",
+  "engineVersion": "v0.20.8",
+  "sdk": {
+    "source": "dang"
+  }
+}

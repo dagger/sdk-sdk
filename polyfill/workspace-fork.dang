@@ -7,7 +7,7 @@ when producing a Changeset, because today's clients apply returned changesets
 relative to the caller cwd.
 """
 type PolyfillWorkspaceFork {
-  let wsID: String!
+  let ws: Workspace!
 
   """
   Caller cwd relative to the workspace root.
@@ -25,7 +25,7 @@ type PolyfillWorkspaceFork {
     let localPath = clientPath(workspacePath)
 
     PolyfillWorkspaceFork(
-      wsID: wsID,
+      ws: ws,
       cwd: cwd,
       before: beforeWithExistingFile(workspacePath, localPath),
       after: after.withNewFile(localPath, contents),
@@ -40,7 +40,7 @@ type PolyfillWorkspaceFork {
     let localPath = clientPath(workspacePath)
 
     PolyfillWorkspaceFork(
-      wsID: wsID,
+      ws: ws,
       cwd: cwd,
       before: beforeWithExistingFile(workspacePath, localPath),
       after: after.withFile(localPath, source),
@@ -55,7 +55,7 @@ type PolyfillWorkspaceFork {
     let localPath = clientPath(workspacePath)
 
     PolyfillWorkspaceFork(
-      wsID: wsID,
+      ws: ws,
       cwd: cwd,
       before: beforeWithExistingDirectory(workspacePath, localPath),
       after: after.withDirectory(localPath, source),
@@ -70,7 +70,7 @@ type PolyfillWorkspaceFork {
     let localPath = clientPath(workspacePath)
 
     PolyfillWorkspaceFork(
-      wsID: wsID,
+      ws: ws,
       cwd: cwd,
       before: before.withDirectory(localPath, beforeSource),
       after: after.withDirectory(localPath, afterSource),
@@ -106,7 +106,7 @@ type PolyfillWorkspaceFork {
     }
 
     PolyfillWorkspaceFork(
-      wsID: wsID,
+      ws: ws,
       cwd: cwd,
       before: before.withDirectory(".", other.before),
       after: after.withDirectory(".", other.after),
@@ -153,10 +153,14 @@ type PolyfillWorkspaceFork {
       path.trimPrefix("./").trimSuffix("/")
     }
   }
+
+  let wsID: String! {
+    toJSON(ws.id)
+  }
 }
 
 """
-Read existing workspace paths without storing core workspace objects in Dang.
+Read existing workspace paths.
 """
 type PolyfillWorkspaceSnapshot {
   """

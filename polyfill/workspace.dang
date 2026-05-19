@@ -2,15 +2,22 @@
 Polyfill implementation of workspace operations needed by SDK development.
 """
 type PolyfillWorkspace {
-  let wsID: String!
+  let ws: Workspace!
   let cwd: String!
+
+  """
+  Return the underlying core Workspace.
+  """
+  pub core: Workspace! {
+    ws
+  }
 
   """
   Return a fork of the workspace state, to stage changes without side effects.
   """
   pub fork: PolyfillWorkspaceFork! {
     PolyfillWorkspaceFork(
-      wsID: wsID,
+      ws: ws,
       cwd: cwd,
       before: directory,
       after: directory,
@@ -18,13 +25,52 @@ type PolyfillWorkspace {
   }
 
   """
+  Return a directory view of this workspace.
+  """
+  pub directory(path: String! = "/", include: [String!]! = ["**"]): Directory! {
+    ws.directory(path, include: include)
+  }
+
+  """
   Load a module source at the given path in the workspace.
   """
   pub moduleSource(path: String!): PolyfillModuleSource! {
     PolyfillModuleSource(
-      wsID: wsID,
+      ws: ws,
       cwd: cwd,
-      path: path,
+      path: moduleSourcePath(path),
     )
+  }
+
+  """
+  Return a module source path resolved relative to the caller cwd.
+  """
+  let moduleSourcePath(path: String!): String! {
+    if (path.trimPrefix("/") != path) {
+      cleanWorkspacePath(path.trimPrefix("/"))
+    } else if (cwd == ".") {
+      cleanWorkspacePath(path)
+    } else {
+      let localPath = cleanWorkspacePath(path)
+      if (localPath == ".") { cwd } else { cwd + "/" + localPath }
+    }
+  }
+
+  """
+  Return a valid workspace-root-relative path.
+  """
+  let cleanWorkspacePath(path: String!): String! {
+    if (path == "" or path == ".") {
+      "."
+    } else if (
+      path == ".."
+        or path.trimPrefix("../") != path
+        or path.contains("/../")
+        or path.trimSuffix("/..") != path
+    ) {
+      raise "path escapes workspace: " + path
+    } else {
+      path.trimPrefix("./").trimSuffix("/")
+    }
   }
 }

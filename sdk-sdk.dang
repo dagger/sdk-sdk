@@ -1,0 +1,238 @@
+"""
+Shared black-box contract checks for official SDK helper modules.
+
+Run from an SDK helper module workspace with:
+
+  dagger -m github.com/dagger/sdk-sdk check
+
+The checks load the caller's module through the Dagger CLI and validate the
+public API that SDK developers actually use.
+"""
+type SdkSdk {
+  """
+  `init` should stage a dagger.json at the default module location.
+  """
+  pub initAddsDefaultConfig(ws: Workspace!): Void @check {
+    let module = targetModule(ws)
+    target(module).assertJsonListContains(
+      defaultInit + ["added-paths"],
+      defaultInitConfig,
+      "init should add the default module dagger.json",
+    )
+  }
+
+  """
+  `init` should not edit existing files when creating a new module.
+  """
+  pub initDoesNotModifyExistingFiles(ws: Workspace!): Void @check {
+    let module = targetModule(ws)
+    target(module).assertJsonListEmpty(
+      defaultInit + ["modified-paths"],
+      "init should not modify existing files",
+    )
+  }
+
+  """
+  `init` should not remove existing files when creating a new module.
+  """
+  pub initDoesNotRemoveExistingFiles(ws: Workspace!): Void @check {
+    let module = targetModule(ws)
+    target(module).assertJsonListEmpty(
+      defaultInit + ["removed-paths"],
+      "init should not remove existing files",
+    )
+  }
+
+  """
+  `init` should write the requested module name.
+  """
+  pub initWritesRequestedName(ws: Workspace!): Void @check {
+    let module = targetModule(ws)
+    target(module).assertJsonStringContains(
+      defaultInit + ["after", "file", "--path", defaultInitConfig, "contents"],
+      "\"name\": \"" + defaultInitName + "\"",
+      "init should write the requested module name",
+    )
+  }
+
+  """
+  `init` should write an SDK field in dagger.json.
+  """
+  pub initWritesSdkField(ws: Workspace!): Void @check {
+    let module = targetModule(ws)
+    target(module).assertJsonStringContains(
+      defaultInit + ["after", "file", "--path", defaultInitConfig, "contents"],
+      "\"sdk\"",
+      "init should write an sdk field",
+    )
+  }
+
+  """
+  `init --path` should stage files under the requested path.
+  """
+  pub initHonorsCustomPath(ws: Workspace!): Void @check {
+    let module = targetModule(ws)
+    let name = "sdk-contract-custom-init"
+    let modulePath = ".dagger/sdk-contract-custom-init"
+
+    target(module).assertJsonListContains(
+      ["init", "--name", name, "--path", modulePath, "added-paths"],
+      modulePath + "/dagger.json",
+      "init should honor the requested module path",
+    )
+  }
+
+  """
+  `mod --path . --find-up=false path` should report the current module path.
+  """
+  pub modReportsCurrentPath(ws: Workspace!): Void @check {
+    let module = targetModule(ws)
+    target(module).assertJsonString(
+      modArgs + ["path"],
+      ".",
+      "mod should report the workspace-relative module path",
+    )
+  }
+
+  """
+  `mod` should expose a dependency manager.
+  """
+  pub modExposesDependencyManager(ws: Workspace!): Void @check {
+    let module = targetModule(ws)
+    let testTarget = target(module)
+
+    testTarget.assertSuccess(
+      dependencyManagerArgs(testTarget) + ["list"],
+      "mod should expose dependency management",
+    )
+  }
+
+  """
+  `dependencies.add` should edit dagger.json.
+  """
+  pub dependencyAddModifiesDaggerJson(ws: Workspace!): Void @check {
+    let module = targetModule(ws)
+    let testTarget = target(module)
+
+    testTarget.assertJsonListContains(
+      addDependencyArgs(testTarget) + ["modified-paths"],
+      "dagger.json",
+      "dependencies.add should modify dagger.json",
+    )
+  }
+
+  """
+  `dependencies.add` should not create unrelated files.
+  """
+  pub dependencyAddDoesNotAddFiles(ws: Workspace!): Void @check {
+    let module = targetModule(ws)
+    let testTarget = target(module)
+
+    testTarget.assertJsonListEmpty(
+      addDependencyArgs(testTarget) + ["added-paths"],
+      "dependencies.add should not add files",
+    )
+  }
+
+  """
+  `dependencies.add` should not remove files.
+  """
+  pub dependencyAddDoesNotRemoveFiles(ws: Workspace!): Void @check {
+    let module = targetModule(ws)
+    let testTarget = target(module)
+
+    testTarget.assertJsonListEmpty(
+      addDependencyArgs(testTarget) + ["removed-paths"],
+      "dependencies.add should not remove files",
+    )
+  }
+
+  """
+  `dependencies.add` should preserve the requested dependency name.
+  """
+  pub dependencyAddPreservesName(ws: Workspace!): Void @check {
+    let module = targetModule(ws)
+    let testTarget = target(module)
+
+    testTarget.assertJsonStringContains(
+      addDependencyArgs(testTarget) + ["after", "file", "--path", "dagger.json", "contents"],
+      "\"name\": \"" + dependencyName + "\"",
+      "dependencies.add should preserve the requested name",
+    )
+  }
+
+  """
+  `dependencies.add` should preserve the requested dependency source.
+  """
+  pub dependencyAddPreservesSource(ws: Workspace!): Void @check {
+    let module = targetModule(ws)
+    let testTarget = target(module)
+
+    testTarget.assertJsonStringContains(
+      addDependencyArgs(testTarget) + ["after", "file", "--path", "dagger.json", "contents"],
+      "\"source\": \"" + dependencySource + "\"",
+      "dependencies.add should preserve the requested source",
+    )
+  }
+
+  """
+  Return a black-box CLI target for a prepared module source.
+  """
+  let target(module: PolyfillModuleSource!): ModTestTarget! {
+    modTest.target(module.workspaceView, module.sourceRootPath)
+  }
+
+  """
+  Return dependency manager CLI args, accepting the Go SDK's temporary `deps` alias.
+  """
+  let dependencyManagerArgs(target: ModTestTarget!): [String!]! {
+    let dependencies = target.tryCall(modArgs + ["dependencies", "list"])
+
+    if (dependencies.succeeded) {
+      modArgs + ["dependencies"]
+    } else {
+      target.assertSuccess(
+        modArgs + ["deps", "list"],
+        "mod should expose dependency management as `dependencies` or `deps`",
+      )
+      modArgs + ["deps"]
+    }
+  }
+
+  """
+  Return the dependency add command for the target SDK helper.
+  """
+  let addDependencyArgs(target: ModTestTarget!): [String!]! {
+    dependencyManagerArgs(target) + [
+      "add",
+      "--source",
+      dependencySource,
+      "--name",
+      dependencyName,
+    ]
+  }
+
+  """
+  Return the caller module prepared by the workspace polyfill.
+  """
+  let targetModule(ws: Workspace!): PolyfillModuleSource! {
+    let workspace = polyfill.workspace(ws)
+    let module = workspace.moduleSource(".")
+
+    if (module.config.name == selfModule) {
+      workspace.moduleSource(selfFixturePath)
+    } else {
+      module
+    }
+  }
+
+  let defaultInitName: String! = "sdk-contract-init"
+  let defaultInit: [String!]! = ["init", "--name", defaultInitName]
+  let defaultInitConfig: String! = ".dagger/modules/" + defaultInitName + "/dagger.json"
+
+  let dependencyName: String! = "sdk-contract-dependency"
+  let dependencySource: String! = "../" + dependencyName
+  let modArgs: [String!]! = ["mod", "--path", ".", "--find-up=false"]
+  let selfModule: String! = "sdk-sdk"
+  let selfFixturePath: String! = ".dagger/modules/sdk-sdk-e2e/fixtures/sdk-helper"
+}
