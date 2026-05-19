@@ -9,6 +9,7 @@ type PolyfillE2e {
   let forkFilePath: String! = fixtureRoot + "/fork/existing.txt"
   let forkDirPath: String! = fixtureRoot + "/fork/dir"
   let generateModulePath: String! = fixtureRoot + "/generate/app"
+  let updateModulePath: String! = fixtureRoot + "/update/app"
 
   """
   Fail the current check when a condition is false.
@@ -65,13 +66,20 @@ type PolyfillE2e {
   }
 
   """
-  Assert that a config edit modified only dagger.json.
+  Assert that a config edit modified only the given dagger.json.
   """
-  let assertOnlyConfigChanged(changes: Changeset!): Void {
-    assertModified(changes, configModulePath + "/dagger.json")
+  let assertOnlyModuleConfigChanged(changes: Changeset!, path: String!): Void {
+    assertModified(changes, path + "/dagger.json")
     assert(changes.modifiedPaths.length == 1, "config edit modified more than dagger.json")
     assert(changes.addedPaths.length == 0, "config edit added paths")
     assert(changes.removedPaths.length == 0, "config edit removed paths")
+  }
+
+  """
+  Assert that a config edit modified only the default config fixture dagger.json.
+  """
+  let assertOnlyConfigChanged(changes: Changeset!): Void {
+    assertOnlyModuleConfigChanged(changes, configModulePath)
   }
 
   """
@@ -210,6 +218,27 @@ type PolyfillE2e {
       .changes
 
     assert(changes.isEmpty, "updating local-only dependencies should not edit dagger.json")
+
+    null
+  }
+
+  """
+  Updating remote dependencies should rewrite only the remote entries.
+  """
+  pub moduleConfigRemoteUpdateCheck(ws: Workspace!): Void @check {
+    let changes = polyfill.workspace(ws)
+      .moduleSource(updateModulePath)
+      .config
+      .withUpdatedDependencies("hello")
+      .fork
+      .changes
+
+    assertOnlyModuleConfigChanged(changes, updateModulePath)
+    let updated = changes.after.file(updateModulePath + "/dagger.json").contents
+    assertContains(updated, "\"../dep-local\"", "local dependency was not preserved")
+    assertContains(updated, "\"name\": \"hello\"", "remote dependency name was not preserved")
+    assertContains(updated, "\"source\": \"github.com/shykes/daggerverse/hello@main\"", "remote dependency source was not normalized")
+    assertContains(updated, "\"pin\": \"", "remote dependency was not pinned")
 
     null
   }
