@@ -219,6 +219,10 @@ type SdkSdk {
     let workspace = polyfill.workspace(ws)
     let module = workspace.moduleSource(".")
 
+    if (module.configExists == false) {
+      raise noSdkModuleMessage
+    }
+
     if (module.config.name == selfModule) {
       workspace.moduleSource(selfFixturePath)
     } else {
@@ -235,4 +239,5 @@ type SdkSdk {
   let modArgs: [String!]! = ["mod", "--path", ".", "--find-up=false"]
   let selfModule: String! = "sdk-sdk"
   let selfFixturePath: String! = ".dagger/modules/sdk-sdk-e2e/fixtures/sdk-helper"
+  let noSdkModuleMessage: String! = "no SDK module detected in the workspace"
 }

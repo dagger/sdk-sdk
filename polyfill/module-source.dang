@@ -21,6 +21,13 @@ type PolyfillModuleSource {
   }
 
   """
+  Return true when this module source has a dagger.json.
+  """
+  pub configExists: Boolean! {
+    ws.directory("/", include: [configPath]).exists(configPath)
+  }
+
+  """
   Return this module source as a core ModuleSource.
   """
   pub core: ModuleSource! {
