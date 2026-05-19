@@ -8,8 +8,6 @@ type PolyfillModuleConfig {
   let originalContents: String!
   let contents: String!
 
-  let mockRoot: String! = "/mock"
-
   """
   Return dependency names when present, otherwise dependency sources.
   """
@@ -51,24 +49,10 @@ type PolyfillModuleConfig {
 
   """
   Return this module config after updating one dependency, or all remote dependencies.
-
-  This uses `ws` only to build a dagger.json-only mock workspace because the
-  core dependency update API still resolves local dependencies before skipping
-  them.
   """
-  pub withUpdatedDependencies(ws: Workspace!, name: String! = ""): PolyfillModuleConfig! {
+  pub withUpdatedDependencies(name: String! = ""): PolyfillModuleConfig! {
     let updates = if (name == "") { [] } else { [name] }
-    let query = PolyfillDaggerQueryHelpers()
-      .nestedDaggerQueryWithDirectory(
-        "module-source/updated-dependencies",
-        toJSON({{
-          source: mockSource,
-          updates: updates,
-        }}),
-        mockRoot,
-        mockConfigDirectory(ws),
-      )
-    let updatedRemote = updatedRemoteDependencyFragments(query.outputContainer.file("/response.json").asJSON)
+    let updatedRemote = updatedRemoteDependencyFragments(updates)
 
     if (updatedRemote.length == 0) {
       PolyfillModuleConfig(
@@ -108,13 +92,22 @@ type PolyfillModuleConfig {
   Return a workspace fork containing this module config's staged dagger.json change.
   """
   pub fork: PolyfillWorkspaceFork! {
-    let localPath = clientPath(configPath)
-    PolyfillWorkspaceFork(
-      wsID: wsID,
-      cwd: cwd,
-      before: directory.withNewFile(localPath, originalContents),
-      after: directory.withNewFile(localPath, contents),
-    )
+    if (contents == originalContents) {
+      PolyfillWorkspaceFork(
+        wsID: wsID,
+        cwd: cwd,
+        before: directory,
+        after: directory,
+      )
+    } else {
+      let localPath = clientPath(configPath)
+      PolyfillWorkspaceFork(
+        wsID: wsID,
+        cwd: cwd,
+        before: directory.withNewFile(localPath, originalContents),
+        after: directory.withNewFile(localPath, contents),
+      )
+    }
   }
 
   """
@@ -329,53 +322,42 @@ type PolyfillModuleConfig {
   """
   Return updated remote dependencies from a core dependency update response.
   """
-  let updatedRemoteDependencyFragments(response: JSONValue!): [String!]! {
-    response
-      .field(["data", "moduleSource", "withUpdateDependencies", "dependencies"])
+  let updatedRemoteDependencyFragments(updates: [String!]!): [String!]! {
+    PolyfillModuleConfigUpdate()
+      .updatedRemoteDependencies(wsID, path, contents, updates)
+      .asJSON
       .asArray
       .{contents}
-      .map { dependency => updatedRemoteDependencyFragment(toString(dependency.contents)) }
-      .filter { dependency => dependency != "" }
+      .map { dependency => toString(dependency.contents) }
   }
+}
 
+type PolyfillModuleConfigUpdate {
   """
-  Return a dependency object for an updated remote dependency.
+  Return updated remote dependency fragments for a module config.
   """
-  let updatedRemoteDependencyFragment(dependency: String!): String! {
-    let value = json().withContents(dependency :: JSON!)
-    let kind = value.field(["kind"]).asString
-
-    if (kind == "LOCAL_SOURCE") {
-      ""
-    } else if (kind == "GIT_SOURCE") {
-      let name = value.field(["moduleName"]).asString
-      let source = value.field(["asString"]).asString
-      let pin = value.field(["pin"]).asString
-
-      if (pin == "") {
-        toString(toJSON({{ name: name, source: source }}))
-      } else {
-        toString(toJSON({{ name: name, source: source, pin: pin }}))
-      }
-    } else {
-      raise "unsupported dependency kind in query response: " + kind
-    }
-  }
-
-  """
-  Return a dagger.json-only workspace tree for dependency update.
-  """
-  let mockConfigDirectory(ws: Workspace!): Directory! {
-    ws
-      .directory("/", include: ["**/dagger.json"])
-      .withNewFile(configPath, contents)
-      .withNewFile(".git/HEAD", "ref: refs/heads/main\n")
-  }
-
-  """
-  Return the synthetic source path for the module being updated.
-  """
-  let mockSource: String! {
-    if (path == ".") { mockRoot } else { mockRoot + "/" + path }
+  let updatedRemoteDependencies(
+    wsID: String!,
+    path: String!,
+    contents: String!,
+    updates: [String!]!,
+  ): File! {
+    container
+      .from("golang:1.25-alpine")
+      .withoutEntrypoint
+      .withMountedCache("/go/pkg/mod", cacheVolume("go-mod"))
+      .withMountedCache("/root/.cache/go-build", cacheVolume("go-build"))
+      .withDirectory("/helper", currentModule.source.directory("helpers/module-config-update-dependencies"))
+      .withWorkdir("/helper")
+      .withExec(["go", "build", "-o", "/usr/local/bin/module-config-update-dependencies", "."])
+      .withEnvVariable("DAGGER_TRACE_URL", cloud.traceURL)
+      .withEnvVariable("WORKSPACE_ID", wsID)
+      .withEnvVariable("MODULE_CONFIG_CONTENTS", contents)
+      .withEnvVariable("MODULE_CONFIG_UPDATES_JSON", toJSON(updates))
+      .withExec(
+        ["module-config-update-dependencies", "--path", path, "--out", "/dependencies.json"],
+        experimentalPrivilegedNesting: true,
+      )
+      .file("/dependencies.json")
   }
 }
