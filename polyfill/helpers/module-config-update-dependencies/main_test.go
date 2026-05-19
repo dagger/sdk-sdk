@@ -51,6 +51,19 @@ func TestDaggerJSONPath(t *testing.T) {
 	}
 }
 
+func TestMockSourcePath(t *testing.T) {
+	tests := map[string]string{
+		".":        "/mock",
+		"polyfill": "/mock/polyfill",
+	}
+
+	for in, want := range tests {
+		if got := mockSourcePath(in); got != want {
+			t.Fatalf("mockSourcePath(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestUpdatesFromEnv(t *testing.T) {
 	t.Setenv(updatesJSONEnv, `["one","two"]`)
 

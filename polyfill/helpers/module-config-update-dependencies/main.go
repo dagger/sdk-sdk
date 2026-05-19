@@ -18,6 +18,7 @@ const (
 	configContentsEnv   = "MODULE_CONFIG_CONTENTS"
 	updatesJSONEnv      = "MODULE_CONFIG_UPDATES_JSON"
 	defaultGitHeadValue = "ref: refs/heads/main\n"
+	mockRoot            = "/mock"
 )
 
 type configDependency struct {
@@ -68,7 +69,7 @@ func run(ctx context.Context, args []string) error {
 	defer client.Close()
 
 	workspace := client.LoadWorkspaceFromID(dagger.WorkspaceID(workspaceID))
-	dependencies, err := updatedRemoteDependencies(ctx, workspace, *modulePath, contents, updates)
+	dependencies, err := updatedRemoteDependencies(ctx, client, workspace, *modulePath, contents, updates)
 	if err != nil {
 		return err
 	}
@@ -85,6 +86,7 @@ func run(ctx context.Context, args []string) error {
 
 func updatedRemoteDependencies(
 	ctx context.Context,
+	client *dagger.Client,
 	workspace *dagger.Workspace,
 	modulePath string,
 	contents string,
@@ -95,13 +97,15 @@ func updatedRemoteDependencies(
 		return nil, err
 	}
 
-	src := workspace.
+	mock := workspace.
 		Directory("/", dagger.WorkspaceDirectoryOpts{Include: []string{"**/dagger.json"}}).
 		WithNewFile(daggerJSONPath(modulePath), contents).
-		WithNewFile(".git/HEAD", defaultGitHeadValue).
-		AsModuleSource(dagger.DirectoryAsModuleSourceOpts{SourceRootPath: modulePath})
+		WithNewFile(".git/HEAD", defaultGitHeadValue)
+	if _, err := mock.Export(ctx, mockRoot); err != nil {
+		return nil, fmt.Errorf("export mock workspace: %w", err)
+	}
 
-	dependencies, err := src.WithUpdateDependencies(updates).Dependencies(ctx)
+	dependencies, err := workspaceModuleSource(client, modulePath).WithUpdateDependencies(updates).Dependencies(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -117,6 +121,13 @@ func updatedRemoteDependencies(
 		}
 	}
 	return updated, nil
+}
+
+func workspaceModuleSource(client *dagger.Client, modulePath string) *dagger.ModuleSource {
+	return client.ModuleSource(mockSourcePath(modulePath), dagger.ModuleSourceOpts{
+		DisableFindUp: true,
+		RequireKind:   dagger.ModuleSourceKindLocalSource,
+	})
 }
 
 func remoteDependency(ctx context.Context, dependency *dagger.ModuleSource) (configDependency, bool, error) {
@@ -194,4 +205,11 @@ func daggerJSONPath(modulePath string) string {
 		return "dagger.json"
 	}
 	return path.Join(modulePath, "dagger.json")
+}
+
+func mockSourcePath(modulePath string) string {
+	if modulePath == "." {
+		return mockRoot
+	}
+	return path.Join(mockRoot, modulePath)
 }
