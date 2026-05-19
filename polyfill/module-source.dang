@@ -125,7 +125,6 @@ type PolyfillGeneration {
       .withDirectory("/helper", currentModule.source.directory("helpers/workspace-module-generate"))
       .withWorkdir("/helper")
       .withExec(["go", "build", "-o", "/usr/local/bin/workspace-module-generate", "."])
-      .withEnvVariable("DAGGER_TRACE_URL", cloud.traceURL)
       .withEnvVariable("WORKSPACE_ID", wsID)
       .withExec(
         ["workspace-module-generate", "--root", root] + cwdFlags + localFlags + [ref],
@@ -158,7 +157,6 @@ type PolyfillGeneration {
       .withDirectory("/helper", currentModule.source.directory("helpers/workspace-module-generate"))
       .withWorkdir("/helper")
       .withExec(["go", "build", "-o", "/usr/local/bin/workspace-module-generate", "."])
-      .withEnvVariable("DAGGER_TRACE_URL", cloud.traceURL)
       .withEnvVariable("WORKSPACE_ID", wsID)
       .withExec(
         ["workspace-module-generate", "--id-out", "/module-source.id"] + cwdFlags + localFlags + [ref],
@@ -189,7 +187,6 @@ type PolyfillGeneration {
       .withDirectory("/helper", currentModule.source.directory("helpers/workspace-module-generate"))
       .withWorkdir("/helper")
       .withExec(["go", "build", "-o", "/usr/local/bin/workspace-module-generate", "."])
-      .withEnvVariable("DAGGER_TRACE_URL", cloud.traceURL)
       .withEnvVariable("WORKSPACE_ID", wsID)
       .withExec(
         ["workspace-module-generate", "--view-out", "/workspace-view"] + cwdFlags + localFlags + [ref],

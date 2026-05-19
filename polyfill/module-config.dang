@@ -361,7 +361,6 @@ type PolyfillModuleConfigUpdate {
       .withDirectory("/helper", currentModule.source.directory("helpers/module-config-update-dependencies"))
       .withWorkdir("/helper")
       .withExec(["go", "build", "-o", "/usr/local/bin/module-config-update-dependencies", "."])
-      .withEnvVariable("DAGGER_TRACE_URL", cloud.traceURL)
       .withEnvVariable("WORKSPACE_ID", wsID)
       .withEnvVariable("MODULE_CONFIG_CONTENTS", contents)
       .withEnvVariable("MODULE_CONFIG_UPDATES_JSON", toJSON(updates))

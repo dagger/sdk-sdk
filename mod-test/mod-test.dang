@@ -160,7 +160,6 @@ type ModTestTarget {
       .withExec(["chmod", "+x", "/usr/local/bin/dagger"])
       .withMountedDirectory("/work", workspaceView)
       .withWorkdir("/work")
-      .withEnvVariable("DAGGER_TRACE_URL", cloud.traceURL)
   }
 }
 

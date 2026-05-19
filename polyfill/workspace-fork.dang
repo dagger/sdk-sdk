@@ -189,7 +189,6 @@ type PolyfillWorkspaceSnapshot {
       .withDirectory("/helper", currentModule.source.directory("helpers/workspace-snapshot"))
       .withWorkdir("/helper")
       .withExec(["go", "build", "-o", "/usr/local/bin/workspace-snapshot", "."])
-      .withEnvVariable("DAGGER_TRACE_URL", cloud.traceURL)
       .withEnvVariable("WORKSPACE_ID", wsID)
       .withExec([
         "workspace-snapshot",
