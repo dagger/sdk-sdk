@@ -111,7 +111,6 @@ type PolyfillModuleConfig {
     let localPath = clientPath(configPath)
     PolyfillWorkspaceFork(
       wsID: wsID,
-      root: directory,
       cwd: cwd,
       before: directory.withNewFile(localPath, originalContents),
       after: directory.withNewFile(localPath, contents),

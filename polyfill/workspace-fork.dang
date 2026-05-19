@@ -1,9 +1,6 @@
 """
 Helpers for staging workspace-rooted edits before returning a Changeset.
 
-This file is prefixed with 00 because Dang currently resolves type annotations
-in file load order.
-
 This is a local shim for a future core concept. Callers pass paths relative to
 the workspace root. The shim converts them to the caller's workspace cwd only
 when producing a Changeset, because today's clients apply returned changesets
@@ -11,7 +8,6 @@ relative to the caller cwd.
 """
 type PolyfillWorkspaceFork {
   let wsID: String!
-  let root: Directory!
 
   """
   Caller cwd relative to the workspace root.
@@ -30,7 +26,6 @@ type PolyfillWorkspaceFork {
 
     PolyfillWorkspaceFork(
       wsID: wsID,
-      root: root,
       cwd: cwd,
       before: beforeWithExistingFile(workspacePath, localPath),
       after: after.withNewFile(localPath, contents),
@@ -46,7 +41,6 @@ type PolyfillWorkspaceFork {
 
     PolyfillWorkspaceFork(
       wsID: wsID,
-      root: root,
       cwd: cwd,
       before: beforeWithExistingFile(workspacePath, localPath),
       after: after.withFile(localPath, source),
@@ -62,7 +56,6 @@ type PolyfillWorkspaceFork {
 
     PolyfillWorkspaceFork(
       wsID: wsID,
-      root: root,
       cwd: cwd,
       before: beforeWithExistingDirectory(workspacePath, localPath),
       after: after.withDirectory(localPath, source),
@@ -78,7 +71,6 @@ type PolyfillWorkspaceFork {
 
     PolyfillWorkspaceFork(
       wsID: wsID,
-      root: root,
       cwd: cwd,
       before: before.withDirectory(localPath, beforeSource),
       after: after.withDirectory(localPath, afterSource),
@@ -115,7 +107,6 @@ type PolyfillWorkspaceFork {
 
     PolyfillWorkspaceFork(
       wsID: wsID,
-      root: root,
       cwd: cwd,
       before: before.withDirectory(".", other.before),
       after: after.withDirectory(".", other.after),
@@ -133,22 +124,14 @@ type PolyfillWorkspaceFork {
   Return the before directory with the current workspace file added if it exists.
   """
   let beforeWithExistingFile(workspacePath: String!, localPath: String!): Directory! {
-    if (root.exists(workspacePath)) {
-      before.withFile(localPath, root.file(workspacePath))
-    } else {
-      before
-    }
+    before.withDirectory(".", PolyfillWorkspaceSnapshot().existingFile(wsID, workspacePath, localPath))
   }
 
   """
   Return the before directory with the current workspace directory added if it exists.
   """
   let beforeWithExistingDirectory(workspacePath: String!, localPath: String!): Directory! {
-    if (root.exists(workspacePath)) {
-      before.withDirectory(localPath, root.directory(workspacePath))
-    } else {
-      before
-    }
+    before.withDirectory(".", PolyfillWorkspaceSnapshot().existingDirectory(wsID, workspacePath, localPath))
   }
 
   """
@@ -230,7 +213,6 @@ type PolyfillWorkspaceForkChecks {
   let fork(ws: Workspace!, cwd: String!): PolyfillWorkspaceFork! {
     PolyfillWorkspaceFork(
       wsID: toJSON(ws.id),
-      root: ws.directory("/", include: ["**", "**/.*/**"]),
       cwd: cwd,
       before: directory,
       after: directory,
@@ -261,6 +243,49 @@ type PolyfillWorkspaceForkChecks {
   """
   let assertContains(value: String!, want: String!, message: String!): Void {
     assert(value.contains(want), message)
+  }
+}
+
+"""
+Read existing workspace paths without storing core workspace objects in Dang.
+"""
+type PolyfillWorkspaceSnapshot {
+  """
+  Return a directory containing the existing workspace file, if it exists.
+  """
+  let existingFile(wsID: String!, workspacePath: String!, localPath: String!): Directory! {
+    existing("file", wsID, workspacePath, localPath)
+  }
+
+  """
+  Return a directory containing the existing workspace directory, if it exists.
+  """
+  let existingDirectory(wsID: String!, workspacePath: String!, localPath: String!): Directory! {
+    existing("directory", wsID, workspacePath, localPath)
+  }
+
+  """
+  Return a directory snapshot of one existing workspace path.
+  """
+  let existing(kind: String!, wsID: String!, workspacePath: String!, localPath: String!): Directory! {
+    container
+      .from("golang:1.25-alpine")
+      .withoutEntrypoint
+      .withMountedCache("/go/pkg/mod", cacheVolume("go-mod"))
+      .withMountedCache("/root/.cache/go-build", cacheVolume("go-build"))
+      .withDirectory("/helper", currentModule.source.directory("helpers/workspace-snapshot"))
+      .withWorkdir("/helper")
+      .withExec(["go", "build", "-o", "/usr/local/bin/workspace-snapshot", "."])
+      .withEnvVariable("DAGGER_TRACE_URL", cloud.traceURL)
+      .withEnvVariable("WORKSPACE_ID", wsID)
+      .withExec([
+        "workspace-snapshot",
+        "--kind", kind,
+        "--path", workspacePath,
+        "--local-path", localPath,
+        "--out", "/out",
+      ], experimentalPrivilegedNesting: true)
+      .directory("/out")
   }
 }
 
