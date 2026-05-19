@@ -1,0 +1,268 @@
+"""
+End-to-end checks for the polyfill module.
+"""
+type PolyfillE2e {
+  let fixtureRoot: String! = ".dagger/modules/polyfill-e2e/fixtures"
+  let outputRoot: String! = ".dagger/modules/polyfill-e2e/out"
+
+  let configModulePath: String! = fixtureRoot + "/config/app"
+  let forkFilePath: String! = fixtureRoot + "/fork/existing.txt"
+  let forkDirPath: String! = fixtureRoot + "/fork/dir"
+  let generateModulePath: String! = fixtureRoot + "/generate/app"
+
+  """
+  Fail the current check when a condition is false.
+  """
+  let assert(condition: Boolean!, message: String!): Void {
+    if (condition == false) {
+      raise message
+    }
+    null
+  }
+
+  """
+  Return true when a list contains the exact string.
+  """
+  let contains(values: [String!]!, want: String!): Boolean! {
+    values
+      .filter { value => value == want }
+      .length > 0
+  }
+
+  """
+  Assert that a changeset added a path.
+  """
+  let assertAdded(changes: Changeset!, path: String!): Void {
+    assert(contains(changes.addedPaths, path), "expected added path: " + path)
+  }
+
+  """
+  Assert that a changeset modified a path.
+  """
+  let assertModified(changes: Changeset!, path: String!): Void {
+    assert(contains(changes.modifiedPaths, path), "expected modified path: " + path)
+  }
+
+  """
+  Assert that a changeset removed a path.
+  """
+  let assertRemoved(changes: Changeset!, path: String!): Void {
+    assert(contains(changes.removedPaths, path), "expected removed path: " + path)
+  }
+
+  """
+  Assert that a string contains a substring.
+  """
+  let assertContains(value: String!, want: String!, message: String!): Void {
+    assert(value.contains(want), message)
+  }
+
+  """
+  Assert that a string does not contain a substring.
+  """
+  let assertNotContains(value: String!, want: String!, message: String!): Void {
+    assert(value.contains(want) == false, message)
+  }
+
+  """
+  Assert that a config edit modified only dagger.json.
+  """
+  let assertOnlyConfigChanged(changes: Changeset!): Void {
+    assertModified(changes, configModulePath + "/dagger.json")
+    assert(changes.modifiedPaths.length == 1, "config edit modified more than dagger.json")
+    assert(changes.addedPaths.length == 0, "config edit added paths")
+    assert(changes.removedPaths.length == 0, "config edit removed paths")
+  }
+
+  """
+  Explicit workspace projections should load the module config.
+  """
+  pub workspaceProjectionCheck(ws: Workspace!): Void @check {
+    let explicit = polyfill.workspace(ws).moduleSource(configModulePath).config.requiredEngineVersion
+
+    assert(explicit == "0.20.8", "explicit workspace projection read the wrong engine version")
+
+    null
+  }
+
+  """
+  Workspace forks should classify new, existing file, and existing directory edits.
+  """
+  pub workspaceForkEditCheck(ws: Workspace!): Void @check {
+    let salt = cloud.traceURL
+    let pws = polyfill.workspace(ws)
+    let addedPath = outputRoot + "/fork/new.txt"
+    let added = pws
+      .fork
+      .withNewFile(addedPath, "new\n" + salt)
+      .changes
+
+    assertAdded(added, addedPath)
+    assert(added.modifiedPaths.length == 0, "new file edit unexpectedly modified paths")
+    assert(added.layer.file(addedPath).contents.contains(salt), "new file edit wrote the wrong contents")
+
+    let replaced = pws
+      .fork
+      .withNewFile(forkFilePath, "replaced\n" + salt)
+      .changes
+
+    assertModified(replaced, forkFilePath)
+    assert(replaced.addedPaths.length == 0, "existing file edit should not add paths")
+    assertContains(replaced.layer.file(forkFilePath).contents, "replaced", "existing file edit wrote the wrong contents")
+
+    let replacementFile = directory
+      .withNewFile("replacement.txt", "file\n" + salt)
+      .file("replacement.txt")
+    let replacedFile = pws
+      .fork
+      .withFile(forkFilePath, replacementFile)
+      .changes
+
+    assertModified(replacedFile, forkFilePath)
+    assert(replacedFile.addedPaths.length == 0, "existing file source edit should not add paths")
+    assertContains(replacedFile.layer.file(forkFilePath).contents, "file", "existing file source edit wrote the wrong contents")
+
+    let replacementDir = directory
+      .withNewFile("old.txt", "updated\n" + salt)
+      .withNewFile("new.txt", "created\n" + salt)
+    let replacedDir = pws
+      .fork
+      .withDirectory(forkDirPath, replacementDir)
+      .changes
+
+    assertModified(replacedDir, forkDirPath + "/old.txt")
+    assertAdded(replacedDir, forkDirPath + "/new.txt")
+
+    let diffPath = outputRoot + "/fork/diff"
+    let before = directory.withNewFile("old.txt", "old\n" + salt)
+    let after = directory.withNewFile("new.txt", "new\n" + salt)
+    let diff = pws
+      .fork
+      .withDirectoryDiff(diffPath, before, after)
+      .changes
+
+    assertAdded(diff, diffPath + "/new.txt")
+    assertRemoved(diff, diffPath + "/old.txt")
+
+    let merged = pws
+      .fork
+      .withNewFile(outputRoot + "/fork/one.txt", "one\n" + salt)
+      .merge(pws.fork.withNewFile(outputRoot + "/fork/two.txt", "two\n" + salt))
+      .changes
+
+    assertAdded(merged, outputRoot + "/fork/one.txt")
+    assertAdded(merged, outputRoot + "/fork/two.txt")
+
+    null
+  }
+
+  """
+  Module config helpers should list and edit dagger.json dependencies.
+  """
+  pub moduleConfigDependencyCheck(ws: Workspace!): Void @check {
+    let pws = polyfill.workspace(ws)
+    let deps = pws.moduleSource(configModulePath).config.dependencies
+
+    assert(contains(deps, "../dep-string"), "string dependency source was not listed")
+    assert(contains(deps, "dep-named"), "named dependency was not listed")
+    assert(contains(deps, "../dep-source-only"), "source-only dependency was not listed")
+
+    let added = pws
+      .moduleSource(configModulePath)
+      .config
+      .withDependency("../dep-new")
+      .fork
+      .changes
+    assertOnlyConfigChanged(added)
+    assertContains(added.after.file(configModulePath + "/dagger.json").contents, "\"../dep-new\"", "unnamed dependency was not added")
+
+    let named = pws
+      .moduleSource(configModulePath)
+      .config
+      .withDependency("../dep-new", name: "dep-alias")
+      .fork
+      .changes
+    assertOnlyConfigChanged(named)
+    assertContains(named.after.file(configModulePath + "/dagger.json").contents, "\"name\": \"dep-alias\"", "named dependency was not added")
+    assertContains(named.after.file(configModulePath + "/dagger.json").contents, "\"source\": \"../dep-new\"", "named dependency source was not kept")
+
+    let removed = pws
+      .moduleSource(configModulePath)
+      .config
+      .withoutDependency("dep-named")
+      .fork
+      .changes
+    assertOnlyConfigChanged(removed)
+    assertNotContains(removed.after.file(configModulePath + "/dagger.json").contents, "\"name\": \"dep-named\"", "named dependency was not removed")
+
+    null
+  }
+
+  """
+  Updating local-only dependencies should return an empty config fork.
+  """
+  pub moduleConfigUpdateCheck(ws: Workspace!): Void @check {
+    let changes = polyfill.workspace(ws)
+      .moduleSource(configModulePath)
+      .config
+      .withUpdatedDependencies
+      .fork
+      .changes
+
+    assert(changes.isEmpty, "updating local-only dependencies should not edit dagger.json")
+
+    null
+  }
+
+  """
+  Module config engine helpers should read and normalize engine versions.
+  """
+  pub moduleConfigEngineCheck(ws: Workspace!): Void @check {
+    let config = polyfill.workspace(ws).moduleSource(configModulePath).config
+    let fixed = config.withRequiredEngineVersion("0.21.0").fork.changes
+    let latest = config.withLatestEngineVersion.fork.changes
+
+    assert(config.requiredEngineVersion == "0.20.8", "required engine version should trim a leading v")
+    assertOnlyConfigChanged(fixed)
+    assertContains(fixed.after.file(configModulePath + "/dagger.json").contents, "\"engineVersion\": \"v0.21.0\"", "fixed engine version was not normalized")
+    assertOnlyConfigChanged(latest)
+    assertContains(latest.after.file(configModulePath + "/dagger.json").contents, "\"engineVersion\": \"latest\"", "latest engine version was not written")
+
+    null
+  }
+
+  """
+  Config forks should remain composable with extra workspace edits.
+  """
+  pub moduleConfigForkChainingCheck(ws: Workspace!): Void @check {
+    let changes = polyfill.workspace(ws)
+      .moduleSource(configModulePath)
+      .config
+      .withRequiredEngineVersion("0.21.0")
+      .fork
+      .withNewFile(forkFilePath, "chained\n" + cloud.traceURL)
+      .changes
+
+    assertModified(changes, configModulePath + "/dagger.json")
+    assertModified(changes, forkFilePath)
+    assert(changes.addedPaths.length == 0, "chained config fork should not add existing files")
+
+    null
+  }
+
+  """
+  Module source generation should return generated context changes.
+  """
+  pub moduleSourceGenerateCheck(ws: Workspace!): Void @check {
+    let changes = polyfill.workspace(ws)
+      .moduleSource(generateModulePath)
+      .generate
+      .changes
+
+    assertAdded(changes, generateModulePath + "/dagger.gen.go")
+    assertAdded(changes, generateModulePath + "/go.mod")
+    assertContains(changes.layer.file(generateModulePath + "/dagger.gen.go").contents, "Code generated by dagger.", "generated context did not include dagger.gen.go")
+
+    null
+  }
+}

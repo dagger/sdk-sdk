@@ -11,22 +11,4 @@ type Polyfill {
       cwd: PolyfillWorkspaceCwd().path(ws),
     )
   }
-
-  """
-  Project the current workspace to a polyfill workspace.
-  """
-  pub currentWorkspace: PolyfillWorkspace! {
-    let ws = Dagger.currentWorkspace
-    PolyfillWorkspace(
-      wsID: toJSON(ws.id),
-      cwd: PolyfillWorkspaceCwd().path(ws),
-    )
-  }
-
-  """
-  Check the workspace fork shim that roots returned changesets for the caller.
-  """
-  pub workspaceForkShimCheck(ws: Workspace!, nestedCwd: String! = "polyfill"): Void @check {
-    PolyfillWorkspaceForkChecks().run(ws, nestedCwd)
-  }
 }
