@@ -3,12 +3,5 @@
   "engineVersion": "v0.21.0-20260518233302-dev-9c7d36eb1a83",
   "sdk": {
     "source": "dang"
-  },
-  "dependencies": [
-    {
-      "name": "dagger-cli",
-      "source": "github.com/dagger/dagger/toolchains/cli-dev@main",
-      "pin": "909a48fb2c58c8ac40c3699bad459af6205d36c8"
-    }
-  ]
+  }
 }

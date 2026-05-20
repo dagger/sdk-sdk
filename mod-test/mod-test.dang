@@ -3,12 +3,18 @@ Lightweight black-box testing helpers for Dagger modules.
 """
 type ModTest {
   """
+  Dagger CLI release version used by black-box tests.
+  """
+  pub daggerCliVersion: String! = "latest"
+
+  """
   Return a black-box test target for a workspace-rooted module directory view.
   """
   pub target(workspaceView: Directory!, sourceRootPath: String!): ModTestTarget! {
     ModTestTarget(
       workspaceView: workspaceView,
       sourceRootPath: sourceRootPath,
+      daggerCliVersion: daggerCliVersion,
       timeout: "5m",
     )
   }
@@ -20,6 +26,7 @@ A Dagger module under black-box test.
 type ModTestTarget {
   let workspaceView: Directory!
   let sourceRootPath: String!
+  let daggerCliVersion: String!
   let timeout: String!
 
   """
@@ -29,6 +36,7 @@ type ModTestTarget {
     ModTestTarget(
       workspaceView: workspaceView,
       sourceRootPath: sourceRootPath,
+      daggerCliVersion: daggerCliVersion,
       timeout: timeout,
     )
   }
@@ -150,17 +158,67 @@ type ModTestTarget {
   }
 
   """
-  Container with a pinned Dagger CLI and the target module context mounted.
+  Container with a release Dagger CLI and the target module context mounted.
   """
   let runner: Container! {
-    container
-      .from("golang:1.25-alpine")
+    container(platform: runnerPlatform)
+      .from("alpine:3.22")
       .withoutEntrypoint
-      .withFile("/usr/local/bin/dagger", daggerCli.binary)
-      .withExec(["chmod", "+x", "/usr/local/bin/dagger"])
+      .withFile("/tmp/" + daggerCliArchiveName, daggerCliArchive)
+      .withFile("/tmp/checksums.txt", daggerCliChecksums)
+      .withExec([
+        "sh",
+        "-c",
+        "archive=$1; cd /tmp; line=$(awk -v f=\"$archive\" '$2 == f { print }' checksums.txt); test -n \"$line\"; printf '%s\n' \"$line\" | sha256sum -c -; tar -xzf \"$archive\" -C /usr/local/bin dagger; chmod +x /usr/local/bin/dagger",
+        "install-dagger-cli",
+        daggerCliArchiveName,
+      ])
       .withMountedDirectory("/work", workspaceView)
       .withWorkdir("/work")
   }
+
+  """
+  Resolved Dagger CLI release version without a leading "v".
+  """
+  let daggerCliReleaseVersion: String! {
+    if (daggerCliVersion == "latest") {
+      http(url: "https://dl.dagger.io/dagger/versions/latest").contents.trimSuffix("\n").trimPrefix("v")
+    } else {
+      daggerCliVersion.trimPrefix("v")
+    }
+  }
+
+  """
+  Dagger CLI release archive name for the runner platform.
+  """
+  let daggerCliArchiveName: String! {
+    "dagger_v" + daggerCliReleaseVersion + "_" + runnerOS + "_" + runnerArch + ".tar.gz"
+  }
+
+  """
+  Dagger CLI release archive.
+  """
+  let daggerCliArchive: File! {
+    http(url: daggerCliReleaseURL + "/" + daggerCliArchiveName)
+  }
+
+  """
+  Dagger CLI release checksum file.
+  """
+  let daggerCliChecksums: File! {
+    http(url: daggerCliReleaseURL + "/checksums.txt")
+  }
+
+  """
+  Dagger CLI release URL.
+  """
+  let daggerCliReleaseURL: String! {
+    "https://dl.dagger.io/dagger/releases/" + daggerCliReleaseVersion
+  }
+
+  let runnerPlatform: Platform! = "linux/amd64"
+  let runnerOS: String! = "linux"
+  let runnerArch: String! = "amd64"
 }
 
 """
