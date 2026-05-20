@@ -37,7 +37,7 @@ type ModTestTarget {
   Run `dagger call -j` against the target module and require success.
   """
   pub call(args: [String!]!): ModTestCall! {
-    let result = callWithExpect(args)
+    let result = runCall(args)
     result.assertSuccess
     result
   }
@@ -46,7 +46,7 @@ type ModTestTarget {
   Run `dagger call -j` against the target module and capture failures.
   """
   pub tryCall(args: [String!]!): ModTestCall! {
-    callWithExpect(args)
+    runCall(args)
   }
 
   """
@@ -122,7 +122,7 @@ type ModTestTarget {
   """
   Run `dagger call -j` against the target module.
   """
-  let callWithExpect(args: [String!]!): ModTestCall! {
+  let runCall(args: [String!]!): ModTestCall! {
     ModTestCall(
       container: runner.withExec(
         [

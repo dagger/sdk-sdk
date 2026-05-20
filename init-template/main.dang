@@ -124,7 +124,6 @@ type __SDK_NAME__Module {
   pub dependencies: __SDK_NAME__Dependencies! {
     __SDK_NAME__Dependencies(
       ws: ws,
-      modulePath: modulePath,
       moduleSourcePath: moduleSourcePath,
     )
   }
@@ -135,7 +134,6 @@ type __SDK_NAME__Module {
   pub engine: __SDK_NAME__Engine! {
     __SDK_NAME__Engine(
       ws: ws,
-      modulePath: modulePath,
       moduleSourcePath: moduleSourcePath,
     )
   }
@@ -146,7 +144,6 @@ SDK dependency manager skeleton.
 """
 type __SDK_NAME__Dependencies {
   let ws: Workspace!
-  let modulePath: String!
   let moduleSourcePath: String!
 
   """
@@ -190,7 +187,6 @@ SDK engine manager skeleton.
 """
 type __SDK_NAME__Engine {
   let ws: Workspace!
-  let modulePath: String!
   let moduleSourcePath: String!
 
   """

@@ -28,7 +28,6 @@ type SdkHelperFixture {
   """
   pub mod(ws: Workspace!, path: String! = ".", findUp: Boolean! = true): SdkHelperFixtureMod! {
     SdkHelperFixtureMod(
-      ws: ws,
       modulePath: path,
     )
   }
@@ -45,7 +44,6 @@ type SdkHelperFixture {
 Minimal module handle.
 """
 type SdkHelperFixtureMod {
-  let ws: Workspace!
   let modulePath: String!
 
   """
@@ -59,14 +57,14 @@ type SdkHelperFixtureMod {
   Canonical dependency manager.
   """
   pub dependencies: SdkHelperFixtureDependencies! {
-    SdkHelperFixtureDependencies(ws: ws)
+    SdkHelperFixtureDependencies()
   }
 
   """
   Engine manager.
   """
   pub engine: SdkHelperFixtureEngine! {
-    SdkHelperFixtureEngine(ws: ws)
+    SdkHelperFixtureEngine()
   }
 
   """
@@ -81,8 +79,6 @@ type SdkHelperFixtureMod {
 Minimal dependency manager.
 """
 type SdkHelperFixtureDependencies {
-  let ws: Workspace!
-
   """
   Return configured dependency names.
   """
@@ -113,8 +109,6 @@ type SdkHelperFixtureDependencies {
 Minimal engine manager.
 """
 type SdkHelperFixtureEngine {
-  let ws: Workspace!
-
   """
   Return the configured engine version without a leading v.
   """
