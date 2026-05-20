@@ -34,4 +34,6 @@ The public API follows Go test-style semantics:
 - `tryCall(args)` captures stdout, stderr, and exit code without requiring
   success.
 - `assertSuccess`, `assertFailure`, `assertOutput`, and `assertJson*` helpers
-  keep individual checks short and focused.
+  keep individual checks short and focused. Assertion failures report the
+  caller's curated message; use `tryCall` when a check needs raw stdout or
+  stderr.

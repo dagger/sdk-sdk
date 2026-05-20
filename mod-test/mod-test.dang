@@ -63,7 +63,7 @@ type ModTestTarget {
   pub assertSuccess(args: [String!]!, message: String! = "dagger call should succeed"): Void {
     let result = tryCall(args)
     if (result.succeeded == false) {
-      raise message + "\nargs: " + toJSON(args) + "\nexit code: " + result.exitCode + "\nstderr:\n" + result.stderr
+      raise message
     }
     null
   }
@@ -74,7 +74,7 @@ type ModTestTarget {
   pub assertFailure(args: [String!]!, message: String! = "dagger call should fail"): Void {
     let result = tryCall(args)
     if (result.succeeded) {
-      raise message + "\nargs: " + toJSON(args)
+      raise message
     }
     null
   }
@@ -83,7 +83,12 @@ type ModTestTarget {
   Assert that a target call's raw stdout exactly matches the expected output.
   """
   pub assertOutput(args: [String!]!, want: String!, message: String! = "unexpected dagger call stdout"): Void {
-    let got = call(args).stdout
+    let result = tryCall(args)
+    if (result.succeeded == false) {
+      raise message
+    }
+
+    let got = result.stdout
     assert(got == want, message + "\nargs: " + toJSON(args) + "\nwant:\n" + want + "\ngot:\n" + got)
   }
 
@@ -91,7 +96,12 @@ type ModTestTarget {
   Assert that a target call's JSON stdout exactly matches the expected JSON.
   """
   pub assertJsonOutput(args: [String!]!, want: String!, message: String! = "unexpected dagger call JSON stdout"): Void {
-    let got = call(args).stdout.trimSuffix("\n")
+    let result = tryCall(args)
+    if (result.succeeded == false) {
+      raise message
+    }
+
+    let got = result.stdout.trimSuffix("\n")
     assert(got == want, message + "\nargs: " + toJSON(args) + "\nwant JSON:\n" + want + "\ngot JSON:\n" + got)
   }
 
@@ -106,7 +116,12 @@ type ModTestTarget {
   Assert that a target call's JSON string output contains the expected substring.
   """
   pub assertJsonStringContains(args: [String!]!, want: String!, message: String! = "JSON string output did not contain expected text"): Void {
-    let got = call(args).stdout
+    let result = tryCall(args)
+    if (result.succeeded == false) {
+      raise message
+    }
+
+    let got = result.stdout
     let encoded = toJSON(want).trimPrefix("\"").trimSuffix("\"")
     assert(got.contains(encoded), message + "\nargs: " + toJSON(args) + "\nwant substring:\n" + want + "\ngot JSON:\n" + got)
   }
@@ -122,7 +137,12 @@ type ModTestTarget {
   Assert that a target call's JSON string list output contains the expected string.
   """
   pub assertJsonListContains(args: [String!]!, want: String!, message: String! = "JSON list output did not contain expected string"): Void {
-    let got = call(args).stdout
+    let result = tryCall(args)
+    if (result.succeeded == false) {
+      raise message
+    }
+
+    let got = result.stdout
     let encoded = toJSON(want)
     assert(got.contains(encoded), message + "\nargs: " + toJSON(args) + "\nwant string:\n" + want + "\ngot JSON:\n" + got)
   }
@@ -261,7 +281,7 @@ type ModTestCall {
   """
   pub assertSuccess: Void {
     if (succeeded == false) {
-      raise "dagger call failed: " + toJSON(args) + "\nexit code: " + exitCode + "\nstderr:\n" + stderr
+      raise "dagger call failed: " + toJSON(args)
     }
     null
   }
