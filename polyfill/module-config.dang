@@ -364,6 +364,7 @@ type PolyfillModuleConfigUpdate {
       .withEnvVariable("WORKSPACE_ID", wsID)
       .withEnvVariable("MODULE_CONFIG_CONTENTS", contents)
       .withEnvVariable("MODULE_CONFIG_UPDATES_JSON", toJSON(updates))
+      .withEnvVariable("_EXPERIMENTAL_DAGGER_VERSION", "v0.20.6")
       .withExec(
         ["module-config-update-dependencies", "--path", path, "--out", "/dependencies.json"],
         experimentalPrivilegedNesting: true,

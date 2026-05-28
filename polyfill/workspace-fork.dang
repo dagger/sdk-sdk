@@ -190,6 +190,7 @@ type PolyfillWorkspaceSnapshot {
       .withWorkdir("/helper")
       .withExec(["go", "build", "-o", "/usr/local/bin/workspace-snapshot", "."])
       .withEnvVariable("WORKSPACE_ID", wsID)
+      .withEnvVariable("_EXPERIMENTAL_DAGGER_VERSION", "v0.20.6")
       .withExec([
         "workspace-snapshot",
         "--kind", kind,

@@ -140,6 +140,7 @@ type PolyfillGeneration {
       .withWorkdir("/helper")
       .withExec(["go", "build", "-o", "/usr/local/bin/workspace-module-generate", "."])
       .withEnvVariable("WORKSPACE_ID", wsID)
+      .withEnvVariable("_EXPERIMENTAL_DAGGER_VERSION", "v0.20.6")
       .withExec(
         ["workspace-module-generate", "--root", root] + cwdFlags + localFlags + [ref],
         experimentalPrivilegedNesting: true,
@@ -175,6 +176,7 @@ type PolyfillGeneration {
       .withWorkdir("/helper")
       .withExec(["go", "build", "-o", "/usr/local/bin/workspace-module-generate", "."])
       .withEnvVariable("WORKSPACE_ID", wsID)
+      .withEnvVariable("_EXPERIMENTAL_DAGGER_VERSION", "v0.20.6")
       .withExec(
         ["workspace-module-generate", "--id-out", "/module-source.id"] + cwdFlags + localFlags + [ref],
         experimentalPrivilegedNesting: true,
@@ -208,6 +210,7 @@ type PolyfillGeneration {
       .withWorkdir("/helper")
       .withExec(["go", "build", "-o", "/usr/local/bin/workspace-module-generate", "."])
       .withEnvVariable("WORKSPACE_ID", wsID)
+      .withEnvVariable("_EXPERIMENTAL_DAGGER_VERSION", "v0.20.6")
       .withExec(
         ["workspace-module-generate", "--view-out", "/workspace-view"] + cwdFlags + localFlags + [ref],
         experimentalPrivilegedNesting: true,
