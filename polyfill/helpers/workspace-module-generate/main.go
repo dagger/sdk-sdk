@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -82,13 +83,31 @@ func run(ctx context.Context) error {
 	}
 
 	changes := src.GeneratedContextChangeset()
-	if _, err := changes.Before().Directory(opts.root).Export(ctx, opts.before); err != nil {
-		return fmt.Errorf("export generated context before directory: %w", err)
-	}
+	// Export the generated ("after") tree first. Codegen runs while the changeset
+	// is resolved, so evaluating "before" first would mislabel a codegen failure
+	// as a "before directory" export error. On failure, surface the underlying
+	// command error (e.g. the codegen exec) rather than the changeset/export
+	// wrapper, so callers see the command's own error.
 	if _, err := changes.After().Directory(opts.root).Export(ctx, opts.after); err != nil {
-		return fmt.Errorf("export generated context after directory: %w", err)
+		return generateError(opts.ref, err)
+	}
+	if _, err := changes.Before().Directory(opts.root).Export(ctx, opts.before); err != nil {
+		return fmt.Errorf("export original context directory: %w", err)
 	}
 	return nil
+}
+
+// generateError surfaces the underlying command failure (e.g. the codegen exec)
+// instead of the changeset/export wrapper. The failing command's output is
+// already streamed to stderr via dagger.WithLogOutput, so returning the command
+// error keeps the reported failure aligned with what actually failed. The module
+// ref is kept as context to identify which module's generation failed.
+func generateError(ref string, err error) error {
+	var execErr *dagger.ExecError
+	if errors.As(err, &execErr) {
+		return fmt.Errorf("generate %q: %w", ref, execErr)
+	}
+	return fmt.Errorf("generate %q: %w", ref, err)
 }
 
 func parseModuleSourceOptions(args []string, wantPositionals int) (moduleSourceOptions, error) {
