@@ -68,7 +68,7 @@ func run(ctx context.Context, args []string) error {
 	}
 	defer client.Close()
 
-	workspace := client.LoadWorkspaceFromID(dagger.WorkspaceID(workspaceID))
+	workspace := dagger.Ref[*dagger.Workspace](client, dagger.ID(workspaceID))
 	dependencies, err := updatedRemoteDependencies(ctx, client, workspace, *modulePath, contents, updates)
 	if err != nil {
 		return err
