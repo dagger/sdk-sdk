@@ -50,7 +50,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	workspace := client.LoadWorkspaceFromID(dagger.WorkspaceID(workspaceID))
+	workspace := dagger.Ref[*dagger.Workspace](client, dagger.ID(workspaceID))
 
 	if opts.viewOut != "" {
 		view, err := moduleSourceWorkspaceView(ctx, workspace, opts)
