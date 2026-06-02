@@ -365,12 +365,10 @@ type SdkSdk {
 
     if (rawPath == "" or rawPath == ".") {
       "."
-    } else if (
-      rawPath == ".."
-        or rawPath.trimPrefix("../") != rawPath
-        or rawPath.contains("/../")
-        or rawPath.trimSuffix("/..") != rawPath
-    ) {
+    } else if (rawPath == ".."
+      or rawPath.trimPrefix("../") != rawPath
+      or rawPath.contains("/../")
+      or rawPath.trimSuffix("/..") != rawPath) {
       raise "path escapes workspace: " + rawPath
     } else {
       rawPath.trimSuffix("/")
@@ -382,11 +380,14 @@ type SdkSdk {
   """
   let renderedInitTemplate(name: String!): File! {
     container
-      .from("golang:1.25-alpine")
+      .from("golang:1.26-alpine")
       .withoutEntrypoint
       .withMountedCache("/go/pkg/mod", cacheVolume("go-mod"))
       .withMountedCache("/root/.cache/go-build", cacheVolume("go-build"))
-      .withDirectory("/helper", currentModule.source.directory("helpers/render-init-template"))
+      .withDirectory(
+        "/helper",
+        currentModule.source.directory("helpers/render-init-template"),
+      )
       .withFile("/template/main.dang", currentModule.source.file("init-template/main.dang"))
       .withWorkdir("/helper")
       .withExec(["go", "build", "-o", "/usr/local/bin/render-init-template", "."])
