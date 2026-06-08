@@ -16,15 +16,16 @@ import (
 const workspaceIDEnv = "WORKSPACE_ID"
 
 type moduleSourceOptions struct {
-	ref     string
-	cwd     string
-	local   bool
-	name    string
-	root    string
-	before  string
-	after   string
-	idOut   string
-	viewOut string
+	ref         string
+	cwd         string
+	local       bool
+	name        string
+	root        string
+	before      string
+	after       string
+	idOut       string
+	viewOut     string
+	stagedDirID string
 }
 
 func main() {
@@ -45,6 +46,15 @@ func run(ctx context.Context) error {
 		return err
 	}
 	defer client.Close()
+
+	// Staged mode: generate a module that lives only in an in-memory directory
+	// (for example one staged by `init` before it is written to the host). The
+	// directory is passed by ID and the ref positional is its source root path.
+	if opts.stagedDirID != "" {
+		src := dagger.Ref[*dagger.Directory](client, dagger.ID(decodeID(opts.stagedDirID))).
+			AsModuleSource(dagger.DirectoryAsModuleSourceOpts{SourceRootPath: opts.ref})
+		return exportGeneratedContext(ctx, src, opts)
+	}
 
 	workspaceID, err := envString(workspaceIDEnv)
 	if err != nil {
@@ -67,6 +77,11 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	return exportGeneratedContext(ctx, src, opts)
+}
+
+func exportGeneratedContext(ctx context.Context, src *dagger.ModuleSource, opts moduleSourceOptions) error {
 	if opts.name != "" {
 		src = src.WithName(opts.name)
 	}
@@ -97,7 +112,7 @@ func parseModuleSourceOptions(args []string, wantPositionals int) (moduleSourceO
 		return opts, err
 	}
 	if len(rest) != wantPositionals {
-		return opts, fmt.Errorf("usage: workspace-module-generate REF [--cwd CWD] [--local] [--name NAME] [--root ROOT] [--before PATH] [--after PATH] [--id-out PATH] [--view-out PATH]")
+		return opts, fmt.Errorf("usage: workspace-module-generate REF [--cwd CWD] [--local] [--name NAME] [--root ROOT] [--before PATH] [--after PATH] [--id-out PATH] [--view-out PATH] [--staged-dir-id ID]")
 	}
 	opts.ref = rest[0]
 	if opts.root == "" {
@@ -176,6 +191,14 @@ func parseOptions(args []string) (moduleSourceOptions, []string, error) {
 			opts.viewOut = args[i]
 		case strings.HasPrefix(arg, "--view-out="):
 			opts.viewOut = strings.TrimPrefix(arg, "--view-out=")
+		case arg == "--staged-dir-id":
+			i++
+			if i >= len(args) {
+				return opts, nil, fmt.Errorf("--staged-dir-id requires a value")
+			}
+			opts.stagedDirID = args[i]
+		case strings.HasPrefix(arg, "--staged-dir-id="):
+			opts.stagedDirID = strings.TrimPrefix(arg, "--staged-dir-id=")
 		case strings.HasPrefix(arg, "-"):
 			return opts, nil, fmt.Errorf("unknown option: %s", arg)
 		default:
@@ -470,6 +493,16 @@ func clean(p string) (string, error) {
 		return "", fmt.Errorf("path escapes workspace: %s", p)
 	}
 	return p, nil
+}
+
+// decodeID accepts an ID passed either raw or JSON-encoded (as produced by
+// Dang's toJSON) and returns the raw ID string.
+func decodeID(raw string) string {
+	var decoded string
+	if err := json.Unmarshal([]byte(raw), &decoded); err == nil {
+		return decoded
+	}
+	return raw
 }
 
 func envString(name string) (string, error) {

@@ -152,6 +152,41 @@ type PolyfillGeneration {
   }
 
   """
+  Return generated context directories for a module staged in an in-memory
+  directory (for example by `init`, before it is written to the host).
+
+  `stagedDirID` is the JSON-encoded ID of the workspace-rooted directory holding
+  the staged module. `sourceRootPath` is the module root path within it. The
+  returned before/after diff is pruned to the module's generated context, so it
+  can be overlaid onto an existing fork without disturbing unrelated edits.
+  """
+  let stagedModuleGeneratedContext(
+    stagedDirID: String!,
+    sourceRootPath: String!,
+  ): PolyfillDirectoryDiff! {
+    let output = container
+      .from("golang:1.26-alpine")
+      .withoutEntrypoint
+      .withMountedCache("/go/pkg/mod", cacheVolume("go-mod"))
+      .withMountedCache("/root/.cache/go-build", cacheVolume("go-build"))
+      .withDirectory(
+        "/helper",
+        currentModule.source.directory("helpers/workspace-module-generate"),
+      )
+      .withWorkdir("/helper")
+      .withExec(["go", "build", "-o", "/usr/local/bin/workspace-module-generate", "."])
+      .withExec(
+        ["workspace-module-generate", "--staged-dir-id", stagedDirID, sourceRootPath],
+        experimentalPrivilegedNesting: true,
+      )
+
+    PolyfillDirectoryDiff(
+      before: output.directory("/before"),
+      after: output.directory("/after"),
+    )
+  }
+
+  """
   Return the core ModuleSource ID for an existing workspace module.
   """
   let workspaceModuleSourceID(

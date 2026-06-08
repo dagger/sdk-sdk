@@ -82,6 +82,71 @@ type PolyfillWorkspaceFork {
   }
 
   """
+  Generate a module that is currently staged in this fork and overlay its
+  generated files.
+
+  `modulePath` is the staged module root, workspace-root-relative. Generation
+  runs against the fork's staged `after` state, so the module does not need to
+  exist on the host yet. Only generated files are added to `after`; the `before`
+  baseline is left untouched, so a freshly staged module still reports its files
+  as added.
+  """
+  pub withGeneratedModule(modulePath: String!): PolyfillWorkspaceFork! {
+    let workspacePath = cleanWorkspacePath(modulePath)
+    let sourceRootPath = clientPath(workspacePath)
+    let generated = PolyfillGeneration.stagedModuleGeneratedContext(
+      toJSON(after.id),
+      sourceRootPath,
+    )
+
+    PolyfillWorkspaceFork(
+      ws: ws,
+      cwd: cwd,
+      before: before,
+      after: after.withDirectory(".", generated.after),
+    )
+  }
+
+  """
+  Install a staged module into the workspace so it can be called directly.
+
+  This mirrors `dagger mod install`: it records the module in the workspace's
+  `dagger.toml` under `[modules.<name>]` with a workspace-root-relative source.
+  `modulePath` is the staged module root, workspace-root-relative, and `name` is
+  the module name to register.
+
+  The fork is returned unchanged when no install is needed, so callers can always
+  chain it: a module at the workspace root (`modulePath` ".") is the main module
+  and needs no entry, and re-installing an already-registered name is a no-op.
+  """
+  pub withInstalledModule(modulePath: String!, name: String!): PolyfillWorkspaceFork! {
+    let workspacePath = cleanWorkspacePath(modulePath)
+    let section = "[modules." + name + "]"
+
+    if (workspacePath == "." or workspaceConfigContents.contains(section)) {
+      PolyfillWorkspaceFork(ws: ws, cwd: cwd, before: before, after: after)
+    } else {
+      let entry = section + "\nsource = " + toJSON(workspacePath) + "\n"
+      let updated = workspaceConfigContents + "\n" + entry
+      withNewFile(workspaceConfigPath, updated)
+    }
+  }
+
+  """
+  Return the workspace `dagger.toml` contents, or a default header when it does
+  not exist yet.
+  """
+  let workspaceConfigContents: String! {
+    if (ws.directory("/", include: [workspaceConfigPath]).exists(workspaceConfigPath)) {
+      ws.directory("/", include: [workspaceConfigPath]).file(workspaceConfigPath).contents
+    } else {
+      "# Dagger workspace configuration\n# Install modules with: dagger mod install <module>\n"
+    }
+  }
+
+  let workspaceConfigPath: String! = "dagger.toml"
+
+  """
   Return a workspace-root path converted to caller-cwd coordinates.
   """
   let clientPath(path: String!): String! {
