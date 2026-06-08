@@ -24,8 +24,13 @@ type __SDK_NAME__ {
       raise "module already exists: " + modulePath
     }
 
+    # Stage the module, generate it, and install it into the workspace so a
+    # single `init` leaves a ready-to-run module with no follow-up generate or
+    # install step.
     fork
       .withNewFile(configPath, initConfig(name, template, ignoreGenerated))
+      .withGeneratedModule(modulePath)
+      .withInstalledModule(modulePath, name)
       .changes
   }
 
