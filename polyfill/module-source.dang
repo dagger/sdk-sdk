@@ -125,23 +125,10 @@ type PolyfillGeneration {
     local: Boolean! = false,
     root: String! = ".",
   ): PolyfillDirectoryDiff! {
-    let cwdFlags = if (cwd == "") { [] } else { ["--cwd", cwd] }
-    let localFlags = if (local) { ["--local"] } else { [] }
-
-    let output = container
-      .from("golang:1.26-alpine")
-      .withoutEntrypoint
-      .withMountedCache("/go/pkg/mod", cacheVolume("go-mod"))
-      .withMountedCache("/root/.cache/go-build", cacheVolume("go-build"))
-      .withDirectory(
-        "/helper",
-        currentModule.source.directory("helpers/workspace-module-generate"),
-      )
-      .withWorkdir("/helper")
-      .withExec(["go", "build", "-o", "/usr/local/bin/workspace-module-generate", "."])
+    let output = helper
       .withEnvVariable("WORKSPACE_ID", wsID)
       .withExec(
-        ["workspace-module-generate", "--root", root] + cwdFlags + localFlags + [ref],
+        ["workspace-module-generate", "--root", root] + locationFlags(cwd, local) + [ref],
         experimentalPrivilegedNesting: true,
       )
 
@@ -164,17 +151,7 @@ type PolyfillGeneration {
     stagedDirID: String!,
     sourceRootPath: String!,
   ): PolyfillDirectoryDiff! {
-    let output = container
-      .from("golang:1.26-alpine")
-      .withoutEntrypoint
-      .withMountedCache("/go/pkg/mod", cacheVolume("go-mod"))
-      .withMountedCache("/root/.cache/go-build", cacheVolume("go-build"))
-      .withDirectory(
-        "/helper",
-        currentModule.source.directory("helpers/workspace-module-generate"),
-      )
-      .withWorkdir("/helper")
-      .withExec(["go", "build", "-o", "/usr/local/bin/workspace-module-generate", "."])
+    let output = helper
       .withExec(
         ["workspace-module-generate", "--staged-dir-id", stagedDirID, sourceRootPath],
         experimentalPrivilegedNesting: true,
@@ -195,23 +172,10 @@ type PolyfillGeneration {
     cwd: String! = "",
     local: Boolean! = false,
   ): String! {
-    let cwdFlags = if (cwd == "") { [] } else { ["--cwd", cwd] }
-    let localFlags = if (local) { ["--local"] } else { [] }
-
-    container
-      .from("golang:1.26-alpine")
-      .withoutEntrypoint
-      .withMountedCache("/go/pkg/mod", cacheVolume("go-mod"))
-      .withMountedCache("/root/.cache/go-build", cacheVolume("go-build"))
-      .withDirectory(
-        "/helper",
-        currentModule.source.directory("helpers/workspace-module-generate"),
-      )
-      .withWorkdir("/helper")
-      .withExec(["go", "build", "-o", "/usr/local/bin/workspace-module-generate", "."])
+    helper
       .withEnvVariable("WORKSPACE_ID", wsID)
       .withExec(
-        ["workspace-module-generate", "--id-out", "/module-source.id"] + cwdFlags + localFlags + [ref],
+        ["workspace-module-generate", "--id-out", "/module-source.id"] + locationFlags(cwd, local) + [ref],
         experimentalPrivilegedNesting: true,
       )
       .file("/module-source.id")
@@ -228,9 +192,20 @@ type PolyfillGeneration {
     cwd: String! = "",
     local: Boolean! = false,
   ): Directory! {
-    let cwdFlags = if (cwd == "") { [] } else { ["--cwd", cwd] }
-    let localFlags = if (local) { ["--local"] } else { [] }
+    helper
+      .withEnvVariable("WORKSPACE_ID", wsID)
+      .withExec(
+        ["workspace-module-generate", "--view-out", "/workspace-view"] + locationFlags(cwd, local) + [ref],
+        experimentalPrivilegedNesting: true,
+      )
+      .directory("/workspace-view")
+  }
 
+  """
+  Return a container with the `workspace-module-generate` helper built and on
+  PATH, ready to run with `experimentalPrivilegedNesting`.
+  """
+  let helper: Container! {
     container
       .from("golang:1.26-alpine")
       .withoutEntrypoint
@@ -242,12 +217,15 @@ type PolyfillGeneration {
       )
       .withWorkdir("/helper")
       .withExec(["go", "build", "-o", "/usr/local/bin/workspace-module-generate", "."])
-      .withEnvVariable("WORKSPACE_ID", wsID)
-      .withExec(
-        ["workspace-module-generate", "--view-out", "/workspace-view"] + cwdFlags + localFlags + [ref],
-        experimentalPrivilegedNesting: true,
-      )
-      .directory("/workspace-view")
+  }
+
+  """
+  Return the `--cwd`/`--local` flags shared by the workspace helper commands.
+  """
+  let locationFlags(cwd: String!, local: Boolean!): [String!]! {
+    let cwdFlags = if (cwd == "") { [] } else { ["--cwd", cwd] }
+    let localFlags = if (local) { ["--local"] } else { [] }
+    cwdFlags + localFlags
   }
 }
 
