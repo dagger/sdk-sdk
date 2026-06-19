@@ -280,20 +280,31 @@ func workspaceModuleSourceInclude(
 	modulePath string,
 ) ([]string, error) {
 	return moduleSourceInclude(ctx, modulePath, func(ctx context.Context, p string) (sourceConfig, bool, error) {
+		// Prefer the current dagger-module.toml config; fall back to the legacy
+		// dagger.json. moduleSourceInclude already loads the whole module
+		// directory (via "**"), so for dagger-module.toml modules we only need
+		// to confirm the module exists — its includes and dependencies are
+		// resolved by the engine when the source is loaded.
+		tomlPath := moduleConfigPath(p, configFilenameTOML)
+		ok, err := configFileExists(ctx, workspace, tomlPath)
+		if err != nil {
+			return sourceConfig{}, false, err
+		}
+		if ok {
+			return sourceConfig{}, true, nil
+		}
+
 		configPath := daggerJSONPath(p)
-		configDir := workspace.Directory("/", dagger.WorkspaceDirectoryOpts{
-			Include: []string{configPath},
-		})
-		ok, err := configDir.Exists(ctx, configPath, dagger.DirectoryExistsOpts{
-			ExpectedType: dagger.ExistsTypeRegularType,
-		})
+		ok, err = configFileExists(ctx, workspace, configPath)
 		if err != nil {
 			return sourceConfig{}, false, err
 		}
 		if !ok {
 			return sourceConfig{}, false, nil
 		}
-		contents, err := configDir.File(configPath).Contents(ctx)
+		contents, err := workspace.
+			Directory("/", dagger.WorkspaceDirectoryOpts{Include: []string{configPath}}).
+			File(configPath).Contents(ctx)
 		if err != nil {
 			return sourceConfig{}, false, err
 		}
@@ -338,7 +349,7 @@ func moduleSourceInclude(ctx context.Context, modulePath string, readConfig sour
 			return err
 		}
 		if !ok {
-			return fmt.Errorf("module source dagger.json not found: %s", daggerJSONPath(p))
+			return fmt.Errorf("module source config (%s or dagger.json) not found in %q", configFilenameTOML, p)
 		}
 
 		if p == "." {
@@ -420,11 +431,23 @@ func parseSourceConfig(contents string) (sourceConfig, error) {
 	return parsed, nil
 }
 
+const configFilenameTOML = "dagger-module.toml"
+
 func daggerJSONPath(modulePath string) string {
+	return moduleConfigPath(modulePath, "dagger.json")
+}
+
+func moduleConfigPath(modulePath, filename string) string {
 	if modulePath == "." {
-		return "dagger.json"
+		return filename
 	}
-	return path.Join(modulePath, "dagger.json")
+	return path.Join(modulePath, filename)
+}
+
+func configFileExists(ctx context.Context, workspace *dagger.Workspace, configPath string) (bool, error) {
+	return workspace.
+		Directory("/", dagger.WorkspaceDirectoryOpts{Include: []string{configPath}}).
+		Exists(ctx, configPath, dagger.DirectoryExistsOpts{ExpectedType: dagger.ExistsTypeRegularType})
 }
 
 func workspacePath(cwd, ref string) (string, error) {

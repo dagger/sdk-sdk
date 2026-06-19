@@ -306,7 +306,15 @@ type SdkSdk {
   Return a black-box CLI target for a prepared module source.
   """
   let target(module: PolyfillModuleSource!): ModTestTarget! {
-    modTest.target(module.workspaceView, module.sourceRootPath)
+    modTest.target(workspaceRootedView(module), module.sourceRootPath)
+  }
+
+  """
+  Return a view where /work has the same module config as the target fixture.
+  """
+  let workspaceRootedView(module: PolyfillModuleSource!): Directory! {
+    let moduleConfig = module.sourceRootPath + "/dagger.json"
+    module.workspaceView.withFile("dagger.json", module.workspaceView.file(moduleConfig))
   }
 
   """
