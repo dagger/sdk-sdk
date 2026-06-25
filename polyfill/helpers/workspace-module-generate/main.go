@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"dagger.io/dagger"
+	toml "github.com/pelletier/go-toml"
 )
 
 const workspaceIDEnv = "WORKSPACE_ID"
@@ -281,17 +282,29 @@ func workspaceModuleSourceInclude(
 ) ([]string, error) {
 	return moduleSourceInclude(ctx, modulePath, func(ctx context.Context, p string) (sourceConfig, bool, error) {
 		// Prefer the current dagger-module.toml config; fall back to the legacy
-		// dagger.json. moduleSourceInclude already loads the whole module
-		// directory (via "**"), so for dagger-module.toml modules we only need
-		// to confirm the module exists — its includes and dependencies are
-		// resolved by the engine when the source is loaded.
+		// dagger.json. A module's own files are loaded via "**", but local
+		// directory dependencies live outside the module directory, so we must
+		// parse the config and recurse into them — otherwise a dependency
+		// declared only in dagger-module.toml is dropped from the loaded context
+		// and the engine fails with "dir module source does not contain a dagger
+		// config file".
 		tomlPath := moduleConfigPath(p, configFilenameTOML)
 		ok, err := configFileExists(ctx, workspace, tomlPath)
 		if err != nil {
 			return sourceConfig{}, false, err
 		}
 		if ok {
-			return sourceConfig{}, true, nil
+			contents, err := workspace.
+				Directory("/", dagger.WorkspaceDirectoryOpts{Include: []string{tomlPath}}).
+				File(tomlPath).Contents(ctx)
+			if err != nil {
+				return sourceConfig{}, false, err
+			}
+			config, err := parseSourceConfigTOML(contents)
+			if err != nil {
+				return sourceConfig{}, true, fmt.Errorf("parse %s: %w", tomlPath, err)
+			}
+			return config, true, nil
 		}
 
 		configPath := daggerJSONPath(p)
@@ -425,6 +438,33 @@ func parseSourceConfig(contents string) (sourceConfig, error) {
 	for _, raw := range config.Include {
 		var includePath string
 		if err := json.Unmarshal(raw, &includePath); err == nil && includePath != "" {
+			parsed.include = append(parsed.include, includePath)
+		}
+	}
+	return parsed, nil
+}
+
+// parseSourceConfigTOML reads the dependencies and include paths from a
+// dagger-module.toml config.
+func parseSourceConfigTOML(contents string) (sourceConfig, error) {
+	var config struct {
+		Dependencies []struct {
+			Source string `toml:"source"`
+		} `toml:"dependencies"`
+		Include []string `toml:"include"`
+	}
+	if err := toml.Unmarshal([]byte(contents), &config); err != nil {
+		return sourceConfig{}, err
+	}
+
+	var parsed sourceConfig
+	for _, dep := range config.Dependencies {
+		if dep.Source != "" {
+			parsed.dependencies = append(parsed.dependencies, dep.Source)
+		}
+	}
+	for _, includePath := range config.Include {
+		if includePath != "" {
 			parsed.include = append(parsed.include, includePath)
 		}
 	}

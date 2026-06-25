@@ -2,7 +2,10 @@ module workspace-module-generate
 
 go 1.26.1
 
-require dagger.io/dagger v0.21.3
+require (
+	dagger.io/dagger v0.21.3
+	github.com/pelletier/go-toml v1.9.5
+)
 
 require (
 	github.com/99designs/gqlgen v0.17.89 // indirect
