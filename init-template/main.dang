@@ -18,7 +18,7 @@ type __SDK_NAME__ {
   Returns only this SDK's files. The engine writes the module's
   dagger-module.toml and updates workspace config in the same init Changeset.
   """
-  pub initModule(ws: Workspace!, name: String!, path: String!): Changeset! {
+  pub initModule(ws: Workspace!, name: String!, path: String! = "."): Changeset! {
     let seedPath = if (path == "" or path == ".") {
       "main.dang"
     } else {

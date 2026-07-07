@@ -89,11 +89,17 @@ type SdkSdk {
   """
   pub initModuleDoesNotWriteConfig(ws: Workspace!): Void @check {
     let module = targetModule(ws)
+    let testTarget = target(module)
 
-    target(module).assertJsonListNotContains(
+    testTarget.assertJsonListNotContains(
       defaultInit + ["added-paths"],
       defaultInitConfig,
       "initModule should not write dagger.json; the engine owns module config",
+    )
+    testTarget.assertJsonListNotContains(
+      defaultInit + ["added-paths"],
+      defaultInitModuleConfig,
+      "initModule should not write dagger-module.toml; the engine owns module config",
     )
   }
 
@@ -115,10 +121,20 @@ type SdkSdk {
     let module = targetModule(ws)
     let name = "sdk-contract-custom-init"
     let modulePath = ".dagger/sdk-contract-custom-init"
+    let customArgs = ["init-module", "--name", name, "--path", modulePath]
+    let testTarget = target(module)
 
-    target(module).assertJsonListNotEmpty(
-      ["init-module", "--name", name, "--path", modulePath, "added-paths"],
-      "initModule should honor the requested module path",
+    testTarget.assertJsonListNotEmpty(
+      customArgs + ["added-paths"],
+      "initModule should seed files for a custom module path",
+    )
+    # The engine emits a directory marker ("<path>/") for every seeded ancestor,
+    # so a run that honors --path adds the custom module directory. A run that
+    # ignores --path (seeding at the default .dagger/modules/<name>) does not.
+    testTarget.assertJsonListContains(
+      customArgs + ["added-paths"],
+      modulePath + "/",
+      "initModule should seed files under the requested --path",
     )
   }
 
@@ -208,6 +224,7 @@ type SdkSdk {
   let defaultInitName: String! = "sdk-contract-init"
   let defaultInit: [String!]! = ["init-module", "--name", defaultInitName]
   let defaultInitConfig: String! = ".dagger/modules/" + defaultInitName + "/dagger.json"
+  let defaultInitModuleConfig: String! = ".dagger/modules/" + defaultInitName + "/dagger-module.toml"
   let selfModule: String! = "sdk-sdk"
   let selfFixturePath: String! = ".dagger/modules/sdk-sdk-e2e/fixtures/sdk-helper"
   let noSdkModuleMessage: String! = "no SDK module detected. Start with 'dagger module init sdk-sdk my-sdk', or initialize your own Dagger module"
