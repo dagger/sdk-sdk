@@ -5,7 +5,7 @@ type ModTest {
   """
   Dagger CLI release version used by black-box tests.
   """
-  pub daggerCliVersion: String! = "1.0.0-beta.3"
+  pub daggerCliVersion: String! = "1.0.0-beta.5"
 
   """
   Return a black-box test target for a workspace-rooted module directory view.
@@ -145,6 +145,33 @@ type ModTestTarget {
     let got = result.stdout
     let encoded = toJSON(want)
     assert(got.contains(encoded), message + "\nargs: " + toJSON(args) + "\nwant string:\n" + want + "\ngot JSON:\n" + got)
+  }
+
+  """
+  Assert that a target call's JSON string list output does not contain the given string.
+  """
+  pub assertJsonListNotContains(args: [String!]!, want: String!, message: String! = "JSON list output contained an unexpected string"): Void {
+    let result = tryCall(args)
+    if (result.succeeded == false) {
+      raise message
+    }
+
+    let got = result.stdout
+    let encoded = toJSON(want)
+    assert(got.contains(encoded) == false, message + "\nargs: " + toJSON(args) + "\nunexpected string:\n" + want + "\ngot JSON:\n" + got)
+  }
+
+  """
+  Assert that a target call's JSON string list output is not empty.
+  """
+  pub assertJsonListNotEmpty(args: [String!]!, message: String! = "JSON list output should not be empty"): Void {
+    let result = tryCall(args)
+    if (result.succeeded == false) {
+      raise message
+    }
+
+    let got = result.stdout.trimSuffix("\n")
+    assert(got != "[]", message + "\nargs: " + toJSON(args) + "\ngot JSON:\n" + got)
   }
 
   """
