@@ -91,14 +91,15 @@ type SdkSdk {
     let module = targetModule(ws)
     let testTarget = target(module)
 
+    let configBase = ".dagger/modules/" + defaultInitName
     testTarget.assertJsonListNotContains(
       defaultInit + ["added-paths"],
-      defaultInitConfig,
+      configBase + "/dagger.json",
       "initModule should not write dagger.json; the engine owns module config",
     )
     testTarget.assertJsonListNotContains(
       defaultInit + ["added-paths"],
-      defaultInitModuleConfig,
+      configBase + "/dagger-module.toml",
       "initModule should not write dagger-module.toml; the engine owns module config",
     )
   }
@@ -152,32 +153,33 @@ type SdkSdk {
 
   """
   Return a black-box CLI target for a prepared module source.
+
+  The mounted view keeps the target module's config at /work so the CLI can
+  load it from the workspace root.
   """
   let target(module: PolyfillModuleSource!): ModTestTarget! {
-    modTest.target(workspaceRootedView(module), module.sourceRootPath)
-  }
-
-  """
-  Return a view where /work has the same module config as the target fixture.
-  """
-  let workspaceRootedView(module: PolyfillModuleSource!): Directory! {
-    let moduleConfig = module.sourceRootPath + "/dagger.json"
-    module.workspaceView.withFile("dagger.json", module.workspaceView.file(moduleConfig))
+    let view = module.workspaceView.withFile(
+      "dagger.json",
+      module.workspaceView.file(module.sourceRootPath + "/dagger.json"),
+    )
+    modTest.target(view, module.sourceRootPath)
   }
 
   """
   Return the caller module prepared by the workspace polyfill.
+
+  When run against sdk-sdk itself, target the bundled fixture instead.
   """
   let targetModule(ws: Workspace!): PolyfillModuleSource! {
     let workspace = polyfill.workspace(ws)
     let module = workspace.moduleSource(".")
 
     if (module.configExists == false) {
-      raise noSdkModuleMessage
+      raise "no SDK module detected. Start with 'dagger module init sdk-sdk my-sdk', or initialize your own Dagger module"
     }
 
-    if (module.config.name == selfModule) {
-      workspace.moduleSource(selfFixturePath)
+    if (module.config.name == "sdk-sdk") {
+      workspace.moduleSource(".dagger/modules/sdk-sdk-e2e/fixtures/sdk-helper")
     } else {
       module
     }
@@ -223,9 +225,4 @@ type SdkSdk {
 
   let defaultInitName: String! = "sdk-contract-init"
   let defaultInit: [String!]! = ["init-module", "--name", defaultInitName]
-  let defaultInitConfig: String! = ".dagger/modules/" + defaultInitName + "/dagger.json"
-  let defaultInitModuleConfig: String! = ".dagger/modules/" + defaultInitName + "/dagger-module.toml"
-  let selfModule: String! = "sdk-sdk"
-  let selfFixturePath: String! = ".dagger/modules/sdk-sdk-e2e/fixtures/sdk-helper"
-  let noSdkModuleMessage: String! = "no SDK module detected. Start with 'dagger module init sdk-sdk my-sdk', or initialize your own Dagger module"
 }

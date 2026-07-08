@@ -23,7 +23,9 @@ type SdkHelperFixture {
       modulePath.trimSuffix("/") + "/main.dang"
     }
 
-    directory.withNewFile(seedPath, seed(name)).changes(directory)
+    directory
+      .withNewFile(seedPath, "\"\"\"\n" + name + " (fixture seed)\n\"\"\"\ntype Main {\n}\n")
+      .changes(directory)
   }
 
   """
@@ -33,12 +35,5 @@ type SdkHelperFixture {
   """
   pub generate: Changeset! @generate {
     directory.changes(directory)
-  }
-
-  """
-  Seed contents for a new module's main source file.
-  """
-  let seed(name: String!): String! {
-    "\"\"\"\n" + name + " (fixture seed)\n\"\"\"\ntype Main {\n}\n"
   }
 }
