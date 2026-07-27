@@ -2,6 +2,14 @@
 
 Shared contract checks for official SDK helper modules.
 
+For black-box lifecycle checks that drive an SDK module through the real CLI
+(`dagger sdk install`, `dagger module init`, `dagger generate`), see
+[`sdk-test`](./sdk-test):
+
+```sh
+dagger -m github.com/dagger/sdk-sdk/sdk-test -W <sdk-repo> check
+```
+
 Start a new Dang SDK helper module:
 
 ```sh

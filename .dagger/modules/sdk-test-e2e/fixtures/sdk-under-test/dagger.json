@@ -1,0 +1,7 @@
+{
+  "name": "sdk-under-test",
+  "engineVersion": "v0.20.8",
+  "sdk": {
+    "source": "dang"
+  }
+}
