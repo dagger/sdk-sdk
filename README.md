@@ -37,6 +37,12 @@ write engine-owned config (`dagger.json` / `dagger-module.toml`), and must not
 remove existing files. The SDK must also list a `@generate` hook in
 `dagger generate -l`.
 
+Each lifecycle stage and each contract behavior is its own check, so the check
+report shows exactly what passed and what failed. All commands run through one
+pipeline: when a stage fails, its own check captures the error, and the checks
+that depend on it fail with a `prerequisite command failed` message naming that
+stage instead of repeating raw errors.
+
 Configure the CLI release with the top-level `dagger-cli-version` setting; the
 default is `1.0.0-beta.7`. Individual targets accept `with-timeout` for slow
 SDKs (the default command timeout is `10m`). Custom checks can reuse the

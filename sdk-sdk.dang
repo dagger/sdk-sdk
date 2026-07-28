@@ -427,21 +427,21 @@ type SdkTarget {
   Run `dagger sdk install` for the SDK under test and capture the result.
   """
   pub install: SdkRun! {
-    runOn(workspace, "/work", installArgs)
+    SdkRun(container: installedState, args: installArgs)
   }
 
   """
   Run `dagger module init` with the SDK under test and capture the result.
   """
   pub initTestModule: SdkRun! {
-    runOn(installedState, "/work", initArgs)
+    SdkRun(container: initializedState, args: initArgs)
   }
 
   """
   Run `dagger generate` on the scaffolded module and capture the result.
   """
   pub generateWorkspace: SdkRun! {
-    runOn(initializedState, "/work", generateArgs)
+    SdkRun(container: generatedState, args: generateArgs)
   }
 
   """
@@ -487,21 +487,21 @@ type SdkTarget {
   Workspace state after `dagger sdk install`.
   """
   let installedState: Container! {
-    step(workspace, installArgs)
+    pipe(workspace, "/work", installArgs)
   }
 
   """
   Workspace state after `dagger module init`.
   """
   let initializedState: Container! {
-    step(installedState, initArgs)
+    pipe(installedState, "/work", initArgs)
   }
 
   """
   Workspace state after `dagger generate`.
   """
   let generatedState: Container! {
-    step(initializedState, generateArgs)
+    pipe(initializedState, "/work", generateArgs)
   }
 
   """
@@ -524,37 +524,29 @@ type SdkTarget {
   }
 
   """
-  Run a required dagger setup step, failing the pipeline on error.
+  Run a dagger command on a workspace state and capture the result.
   """
-  let step(state: Container!, args: [String!]!): Container! {
-    state.withExec(
-      [
-        "sh",
-        "-c",
-        "timeout_arg=$1; shift 1; exec timeout \"$timeout_arg\" /usr/local/bin/dagger --progress plain -y \"$@\"",
-        "sdk-sdk-step",
-        timeout,
-      ] + args,
-      experimentalPrivilegedNesting: true,
-    )
+  let runOn(state: Container!, workdir: String!, args: [String!]!): SdkRun! {
+    SdkRun(container: pipe(state, workdir, args), args: args)
   }
 
   """
   Run a dagger command and capture stdout, stderr, and exit code.
+
+  Every command runs through the same wrapper. When an earlier pipeline command
+  failed, later commands are skipped and record a `skipped` marker instead, so
+  each check reports either its own failure or a clear prerequisite failure.
   """
-  let runOn(state: Container!, workdir: String!, args: [String!]!): SdkRun! {
-    SdkRun(
-      container: state.withWorkdir(workdir).withExec(
-        [
-          "sh",
-          "-c",
-          "mkdir -p /tmp/sdk-sdk; timeout_arg=$1; shift 1; timeout \"$timeout_arg\" /usr/local/bin/dagger --progress plain -y \"$@\" > /tmp/sdk-sdk/stdout 2> /tmp/sdk-sdk/stderr; code=$?; printf '%s' \"$code\" > /tmp/sdk-sdk/exit-code; exit 0",
-          "sdk-sdk-run",
-          timeout,
-        ] + args,
-        experimentalPrivilegedNesting: true,
-      ),
-      args: args,
+  let pipe(state: Container!, workdir: String!, args: [String!]!): Container! {
+    state.withWorkdir(workdir).withExec(
+      [
+        "sh",
+        "-c",
+        "mkdir -p /tmp/sdk-sdk; timeout_arg=$1; shift 1; if [ -f /tmp/sdk-sdk/failed-command ]; then touch /tmp/sdk-sdk/skipped; exit 0; fi; timeout \"$timeout_arg\" /usr/local/bin/dagger --progress plain -y \"$@\" > /tmp/sdk-sdk/stdout 2> /tmp/sdk-sdk/stderr; code=$?; printf '%s' \"$code\" > /tmp/sdk-sdk/exit-code; if [ \"$code\" -ne 0 ]; then printf 'dagger %s' \"$*\" > /tmp/sdk-sdk/failed-command; cp /tmp/sdk-sdk/stderr /tmp/sdk-sdk/failed-stderr; fi; exit 0",
+        "sdk-sdk-run",
+        timeout,
+      ] + args,
+      experimentalPrivilegedNesting: true,
     )
   }
 
@@ -659,9 +651,22 @@ type SdkRun {
   }
 
   """
+  Whether the command was skipped because an earlier pipeline command failed.
+  """
+  pub skipped: Boolean! {
+    container.directory("/tmp/sdk-sdk").exists("skipped")
+  }
+
+  """
   Fail when the command did not exit successfully.
+
+  When the command never ran because an earlier pipeline command failed, report
+  that prerequisite failure instead.
   """
   pub assertSuccess: Void {
+    if (skipped) {
+      raise "prerequisite command failed: " + failedCommand + "\nstderr:\n" + failedStderr
+    }
     if (succeeded == false) {
       raise "dagger command failed: " + toJSON(args) + "\nstderr:\n" + stderr
     }
@@ -672,6 +677,9 @@ type SdkRun {
   Fail when the command exited successfully.
   """
   pub assertFailure: Void {
+    if (skipped) {
+      raise "prerequisite command failed: " + failedCommand + "\nstderr:\n" + failedStderr
+    }
     if (succeeded) {
       raise "dagger command unexpectedly succeeded: " + toJSON(args)
     }
@@ -690,5 +698,19 @@ type SdkRun {
   """
   pub workspaceHasFile(path: String!): Boolean! {
     container.directory("/work").exists(path)
+  }
+
+  """
+  The first failed pipeline command, as recorded by the run wrapper.
+  """
+  let failedCommand: String! {
+    container.file("/tmp/sdk-sdk/failed-command").contents
+  }
+
+  """
+  The stderr of the first failed pipeline command.
+  """
+  let failedStderr: String! {
+    container.file("/tmp/sdk-sdk/failed-stderr").contents
   }
 }
