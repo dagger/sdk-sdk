@@ -1,166 +1,39 @@
 """
 Minimal SDK helper fixture used to run sdk-sdk's black-box checks end-to-end.
+
+Implements the CLI-1.0 SDK authoring contract: `initModule` plus a `@generate`
+hook. Client generation (`initClient`) is intentionally absent.
 """
 type SdkHelperFixture {
   """
-  Stage a new module dagger.json.
+  Stage SDK-specific seed files for a new module at `path`.
+
+  Returns only this SDK's files; the engine owns dagger-module.toml and
+  workspace config.
   """
-  pub init(
-    ws: Workspace!,
-    name: String!,
-    path: String! = "",
-    template: String! = "",
-    ignoreGenerated: Boolean! = false,
-  ): Changeset! {
+  pub initModule(ws: Workspace!, name: String!, path: String! = ""): Changeset! {
     let modulePath = if (path == "") {
       ".dagger/modules/" + name
     } else {
       path
     }
+    let seedPath = if (modulePath == "." or modulePath == "") {
+      "main.dang"
+    } else {
+      modulePath.trimSuffix("/") + "/main.dang"
+    }
 
     directory
-      .withNewFile(modulePath + "/dagger.json", moduleConfig(name))
+      .withNewFile(seedPath, "\"\"\"\n" + name + " (fixture seed)\n\"\"\"\ntype Main {\n}\n")
       .changes(directory)
   }
 
   """
-  Return a module handle.
-  """
-  pub mod(ws: Workspace!, path: String! = ".", findUp: Boolean! = true): SdkHelperFixtureMod! {
-    SdkHelperFixtureMod(
-      modulePath: path,
-    )
-  }
+  Regenerate the modules this SDK manages.
 
+  Placeholder no-op: returns an empty Changeset.
   """
-  Return the contents for a generated dagger.json.
-  """
-  let moduleConfig(name: String!): String! {
-    "{\n  \"name\": \"" + name + "\",\n  \"sdk\": {\n    \"source\": \"dang\"\n  }\n}\n"
-  }
-}
-
-"""
-Minimal module handle.
-"""
-type SdkHelperFixtureMod {
-  let modulePath: String!
-
-  """
-  Module path relative to the current workspace.
-  """
-  pub path: String! {
-    modulePath
-  }
-
-  """
-  Canonical dependency manager.
-  """
-  pub dependencies: SdkHelperFixtureDependencies! {
-    SdkHelperFixtureDependencies()
-  }
-
-  """
-  Engine manager.
-  """
-  pub engine: SdkHelperFixtureEngine! {
-    SdkHelperFixtureEngine()
-  }
-
-  """
-  Temporary Go SDK alias accepted by sdk-sdk.
-  """
-  pub deps: SdkHelperFixtureDependencies! {
-    dependencies
-  }
-}
-
-"""
-Minimal dependency manager.
-"""
-type SdkHelperFixtureDependencies {
-  """
-  Return configured dependency names.
-  """
-  pub list: [String!]! {
-    []
-  }
-
-  """
-  Stage a named dependency in dagger.json.
-  """
-  pub add(source: String!, name: String! = ""): Changeset! {
-    let updated = "{\n  \"name\": \"sdk-helper-fixture\",\n  \"engineVersion\": \"v0.20.8\",\n  \"sdk\": {\n    \"source\": \"dang\"\n  },\n  \"dependencies\": [\n    {\n      \"name\": \"" + name + "\",\n      \"source\": \"" + source + "\"\n    }\n  ]\n}\n"
-
-    directory
-      .withNewFile("dagger.json", updated)
-      .changes(directory.withNewFile("dagger.json", originalConfig))
-  }
-
-  """
-  Return the fixture's original dagger.json contents.
-  """
-  let originalConfig: String! {
-    "{\n  \"name\": \"sdk-helper-fixture\",\n  \"engineVersion\": \"v0.20.8\",\n  \"sdk\": {\n    \"source\": \"dang\"\n  }\n}\n"
-  }
-}
-
-"""
-Minimal engine manager.
-"""
-type SdkHelperFixtureEngine {
-  """
-  Return the configured engine version without a leading v.
-  """
-  pub required: String! {
-    "0.20.8"
-  }
-
-  """
-  Stage a required engine version in dagger.json.
-  """
-  pub require(version: String!): Changeset! {
-    directory
-      .withNewFile("dagger.json", config(normalizedVersion(version)))
-      .changes(directory.withNewFile("dagger.json", originalConfig))
-  }
-
-  """
-  Stage the current Dagger engine version in dagger.json.
-  """
-  pub requireCurrent: Changeset! {
-    raise "TODO: fixture does not implement current engine detection"
-  }
-
-  """
-  Stage the latest stable Dagger engine version in dagger.json.
-  """
-  pub requireLatest: Changeset! {
-    require("latest")
-  }
-
-  """
-  Return dagger.json contents with the requested engine version.
-  """
-  let config(version: String!): String! {
-    "{\n  \"name\": \"sdk-helper-fixture\",\n  \"engineVersion\": \"" + version + "\",\n  \"sdk\": {\n    \"source\": \"dang\"\n  }\n}\n"
-  }
-
-  """
-  Return the fixture's original dagger.json contents.
-  """
-  let originalConfig: String! {
-    "{\n  \"name\": \"sdk-helper-fixture\",\n  \"engineVersion\": \"v0.20.8\",\n  \"sdk\": {\n    \"source\": \"dang\"\n  }\n}\n"
-  }
-
-  """
-  Return a version string suitable for dagger.json.
-  """
-  let normalizedVersion(version: String!): String! {
-    if (version == "latest" or version.trimPrefix("v") != version) {
-      version
-    } else {
-      "v" + version
-    }
+  pub generate: Changeset! @generate {
+    directory.changes(directory)
   }
 }
