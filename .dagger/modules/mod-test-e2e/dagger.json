@@ -11,7 +11,7 @@
     },
     {
       "name": "polyfill",
-      "source": "../../../polyfill"
+      "source": "github.com/dagger/polyfill@main"
     }
   ]
 }
