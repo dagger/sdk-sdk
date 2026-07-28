@@ -13,36 +13,35 @@ dagger -m github.com/dagger/sdk-sdk/sdk-test -W <sdk-repo> check
 Start a new Dang SDK helper module:
 
 ```sh
-dagger call sdk-sdk init --name my-sdk
+dagger module init sdk-sdk my-sdk
 ```
 
-`--name` is the Dagger module name. The generated Dang root type is derived
-from it, for example `my-sdk` becomes `MySdk`.
+The module name is the Dagger module name. The generated Dang root type is
+derived from it, for example `my-sdk` becomes `MySdk`.
 
-Run it from an SDK helper module workspace:
+Run the checks from an SDK helper module workspace:
 
 ```sh
 cd ./my/sdk/repo
 dagger -m github.com/dagger/sdk-sdk check
 ```
 
-The checks receive the current `Workspace`, find that workspace's `dagger.json`,
-serve the SDK helper module from the workspace, inspect the public GraphQL schema
-users see from the CLI, then exercise a small set of user-facing behaviors
-without applying returned changesets.
+The checks receive the current `Workspace`, serve the SDK helper module from the
+workspace, and exercise its user-facing behavior without applying the returned
+changesets.
 
-The first coverage is intentionally small:
+Under CLI 1.0 the engine owns module bookkeeping — `dagger-module.toml`,
+workspace config, and dependency and engine-version edits. An SDK helper module
+implements only what is genuinely language-specific:
 
-- `init(ws, name, path, template, ignoreGenerated): Changeset!`
-- `mod(ws, path, findUp): Mod!`
-- `Mod.path`
-- `Mod.dependencies.add(source, name): Changeset!`
-- `Mod.engine.required`
-- `Mod.engine.require(version): Changeset!`
+- `initModule(ws, name, path): Changeset!` — seed the SDK's own files for a new
+  module. Because the engine owns module config, `initModule` must **not** write
+  `dagger.json` / `dagger-module.toml`.
+- a `@generate` hook — regenerate the modules the SDK manages. Managed modules
+  are discovered via `currentModule.asSDK.modules`.
 
-The Go SDK currently exposes `Mod.deps`; the contract accepts that alias while
-the shared API is being introduced.
+`initClient` (typed client generation) is an optional part of the contract and
+is not required or exercised here.
 
-Changeset paths are treated as module-relative. For example, `init` is expected
-to report `.dagger/modules/<name>/dagger.json`, and dependency updates are
-expected to report `dagger.json`.
+Changeset paths are workspace-root-relative. For example, `initModule` for a
+module named `my-sdk` is expected to seed files under `.dagger/modules/my-sdk/`.
