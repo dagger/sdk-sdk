@@ -44,7 +44,7 @@ that depend on it fail with a `prerequisite command failed` message naming that
 stage instead of repeating raw errors.
 
 Configure the CLI release with the top-level `dagger-cli-version` setting; the
-default is `1.0.0-beta.7`. Individual targets accept `with-timeout` for slow
+default is `1.0.0-beta.8`. Individual targets accept `with-timeout` for slow
 SDKs (the default command timeout is `10m`). Custom checks can reuse the
 harness through `target`:
 

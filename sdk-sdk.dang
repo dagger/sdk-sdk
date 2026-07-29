@@ -33,7 +33,7 @@ type SdkSdk {
   """
   Dagger CLI release version used by black-box tests.
   """
-  pub daggerCliVersion: String! = "1.0.0-beta.7"
+  pub daggerCliVersion: String! = "1.0.0-beta.8"
 
   """
   Engine runtime recorded for modules created with this SDK.
