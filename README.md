@@ -29,6 +29,9 @@ commands the way a user would:
   capability.
 - `dagger module engine required` and `dagger module deps list` work from the
   scaffolded module directory.
+- `dagger generate` is anchored at the caller's cwd: run from inside one
+  module's directory with a sibling module scaffolded elsewhere, the sibling
+  is left untouched.
 
 Function-level contract checks additionally call the SDK's `initModule`
 directly (always with an explicit `--path`, as the engine does) and inspect

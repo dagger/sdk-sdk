@@ -192,6 +192,24 @@ type SdkSdk {
   }
 
   """
+  `dagger generate` should be anchored at the caller's cwd.
+
+  Generation from inside one module's directory acts on the module cone at or
+  below that directory, so a sibling module elsewhere in the workspace must be
+  left untouched.
+  """
+  pub generateRespectsCwd(ws: Workspace!): Void @check {
+    let testTarget = sdkTarget(ws)
+    let run = testTarget.generateInModuleDir
+    run.assertSuccess
+
+    let drift = run.workspaceChanges(testTarget.siblingModulePath)
+    if (drift != "") {
+      raise "generate from " + testTarget.modulePath + " should not touch the sibling module " + testTarget.siblingModulePath + "\nchanged:\n" + drift
+    }
+  }
+
+  """
   `initModule` should seed SDK files for a new module.
   """
   pub initModuleSeedsFiles(ws: Workspace!): Void @check {
@@ -398,6 +416,11 @@ type SdkTarget {
   pub moduleName: String! = "test-mod"
 
   """
+  Name of the second module scaffolded for cwd-awareness checks.
+  """
+  pub siblingModuleName: String! = "sibling-mod"
+
+  """
   Return a copy of this target with a different command timeout.
   """
   pub withTimeout(timeout: String!): SdkTarget! {
@@ -424,6 +447,13 @@ type SdkTarget {
   }
 
   """
+  Workspace-relative path of the sibling module.
+  """
+  pub siblingModulePath: String! {
+    ".dagger/modules/" + siblingModuleName
+  }
+
+  """
   Run `dagger sdk install` for the SDK under test and capture the result.
   """
   pub install: SdkRun! {
@@ -442,6 +472,15 @@ type SdkTarget {
   """
   pub generateWorkspace: SdkRun! {
     SdkRun(container: generatedState, args: generateArgs)
+  }
+
+  """
+  Run `dagger generate` from inside the first module's directory, with a
+  sibling module scaffolded elsewhere and the workspace committed beforehand,
+  and capture the result.
+  """
+  pub generateInModuleDir: SdkRun! {
+    SdkRun(container: cwdGeneratedState, args: generateArgs)
   }
 
   """
@@ -502,6 +541,35 @@ type SdkTarget {
   """
   let generatedState: Container! {
     pipe(initializedState, "/work", generateArgs)
+  }
+
+  """
+  Workspace state with a sibling module scaffolded next to the first one.
+  """
+  let siblingInitializedState: Container! {
+    pipe(initializedState, "/work", ["module", "init", sdkInstallName, siblingModuleName])
+  }
+
+  """
+  Sibling workspace state with every file committed, so later git status calls
+  see only the changes made after this point.
+  """
+  let cwdSnapshotState: Container! {
+    siblingInitializedState
+      .withExec(["git", "add", "-A"])
+      .withExec([
+        "git",
+        "-c", "user.email=sdk-sdk@dagger.io",
+        "-c", "user.name=sdk-sdk",
+        "commit", "-q", "--allow-empty", "-m", "before cwd-scoped generate",
+      ])
+  }
+
+  """
+  Snapshot state after `dagger generate` from inside the first module's directory.
+  """
+  let cwdGeneratedState: Container! {
+    pipe(cwdSnapshotState, "/work/" + modulePath, generateArgs)
   }
 
   """
@@ -698,6 +766,16 @@ type SdkRun {
   """
   pub workspaceHasFile(path: String!): Boolean! {
     container.directory("/work").exists(path)
+  }
+
+  """
+  Return the git status of a workspace path after the command ran, relative to
+  the last committed snapshot. Empty when the path is untouched.
+  """
+  pub workspaceChanges(path: String!): String! {
+    container
+      .withExec(["git", "-C", "/work", "status", "--porcelain", "--", path])
+      .stdout
   }
 
   """
