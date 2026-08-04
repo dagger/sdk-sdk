@@ -7,7 +7,7 @@ release from `dl.dagger.io`, then runs readable `dagger api call -j` commands
 against the target module.
 
 Configure the CLI release with the top-level `dagger-cli-version` setting. The
-default is `1.0.0-beta.8`.
+default is `1.0.0-beta.9`.
 
 Callers provide:
 

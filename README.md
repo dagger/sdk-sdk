@@ -23,8 +23,9 @@ commands the way a user would:
   `dagger-module.toml`, installs it in `dagger.toml`, and records the SDK as
   the module's authoring SDK.
 - `dagger generate` succeeds on the fresh scaffold.
-- After generation the scaffolded module serves functions:
-  `dagger api functions test-mod`.
+- After generation the scaffolded module loads and serves its API:
+  `dagger api functions test-mod` succeeds (starter templates may expose no
+  functions yet).
 - `dagger sdk module-options <sdk>` introspects the SDK's `initModule`
   capability.
 - `dagger module engine required` and `dagger module deps list` work from the
@@ -47,7 +48,7 @@ that depend on it fail with a `prerequisite command failed` message naming that
 stage instead of repeating raw errors.
 
 Configure the CLI release with the top-level `dagger-cli-version` setting; the
-default is `1.0.0-beta.8`. Individual targets accept `with-timeout` for slow
+default is `1.0.0-beta.9`. Individual targets accept `with-timeout` for slow
 SDKs (the default command timeout is `10m`). Custom checks can reuse the
 harness through `target`:
 
