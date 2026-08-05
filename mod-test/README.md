@@ -3,11 +3,11 @@
 Lightweight black-box testing helpers for Dagger modules.
 
 `mod-test` mounts a workspace-rooted directory view, installs a Dagger CLI
-release from `dl.dagger.io`, then runs readable `dagger call -j` commands
+release from `dl.dagger.io`, then runs readable `dagger api call -j` commands
 against the target module.
 
 Configure the CLI release with the top-level `dagger-cli-version` setting. The
-default is `latest`.
+default is `1.0.0-beta.9`.
 
 Callers provide:
 
