@@ -1,0 +1,87 @@
+"""
+Function-level checks of the SDK's `initModule` contract, calling it directly
+and inspecting the returned changeset.
+"""
+type ContractChecks {
+  let harness: SdkHarness!
+
+  """
+  `initModule` should seed SDK files for a new module.
+  """
+  pub seedsFiles(ws: Workspace!): Void @check {
+    contractTarget(ws).assertJsonListNotEmpty(
+      defaultInit + ["added-paths"],
+      "initModule should seed at least one SDK file",
+    )
+  }
+
+  """
+  `initModule` should not write engine-owned config files.
+  """
+  pub doesNotWriteConfig(ws: Workspace!): Void @check {
+    let testTarget = contractTarget(ws)
+    let configBase = ".dagger/modules/" + defaultInitName
+
+    testTarget.assertJsonListNotContains(
+      defaultInit + ["added-paths"],
+      configBase + "/dagger.json",
+      "initModule should not write dagger.json; the engine owns module config",
+    )
+    testTarget.assertJsonListNotContains(
+      defaultInit + ["added-paths"],
+      configBase + "/dagger-module.toml",
+      "initModule should not write dagger-module.toml; the engine owns module config",
+    )
+  }
+
+  """
+  `initModule` should not remove existing files when creating a new module.
+  """
+  pub doesNotRemoveExistingFiles(ws: Workspace!): Void @check {
+    contractTarget(ws).assertJsonListEmpty(
+      defaultInit + ["removed-paths"],
+      "initModule should not remove existing files",
+    )
+  }
+
+  """
+  `initModule --path` should stage files under the requested path.
+  """
+  pub honorsCustomPath(ws: Workspace!): Void @check {
+    let name = "sdk-contract-custom-init"
+    let modulePath = ".dagger/sdk-contract-custom-init"
+    let customArgs = ["init-module", "--name", name, "--path", modulePath]
+    let testTarget = contractTarget(ws)
+
+    testTarget.assertJsonListNotEmpty(
+      customArgs + ["added-paths"],
+      "initModule should seed files for a custom module path",
+    )
+    # The engine emits a directory marker ("<path>/") for every seeded ancestor,
+    # so a run that honors --path adds the custom module directory. A run that
+    # ignores --path (seeding at the default .dagger/modules/<name>) does not.
+    testTarget.assertJsonListContains(
+      customArgs + ["added-paths"],
+      modulePath + "/",
+      "initModule should seed files under the requested --path",
+    )
+  }
+
+  """
+  Return a function-level contract target for the SDK module under test.
+  """
+  let contractTarget(ws: Workspace!): ModTestTarget! {
+    modTest.target(harness.contractView(ws), harness.sourceRootPath(ws))
+  }
+
+  # The engine always passes an explicit path when it drives initModule, so the
+  # contract checks do too.
+  let defaultInitName: String! = "sdk-contract-init"
+  let defaultInit: [String!]! = [
+    "init-module",
+    "--name",
+    defaultInitName,
+    "--path",
+    ".dagger/modules/" + defaultInitName,
+  ]
+}

@@ -1,0 +1,43 @@
+"""
+Checks for `dagger generate` and the SDK's `@generate` hook.
+"""
+type GenerateChecks {
+  let harness: SdkHarness!
+
+  """
+  `dagger generate` should succeed on a freshly scaffolded module.
+  """
+  pub succeeds(ws: Workspace!): Void @check {
+    harness.sdkTarget(ws).generateWorkspace.assertSuccess
+  }
+
+  """
+  `dagger generate` should be anchored at the caller's cwd.
+
+  Generation from inside one module's directory acts on the module cone at or
+  below that directory, so a sibling module elsewhere in the workspace must be
+  left untouched.
+  """
+  pub respectsCwd(ws: Workspace!): Void @check {
+    let testTarget = harness.sdkTarget(ws)
+    let run = testTarget.generateInModuleDir
+    run.assertSuccess
+
+    let drift = run.workspaceChanges(testTarget.siblingModulePath)
+    if (drift != "") {
+      raise "generate from " + testTarget.modulePath + " should not touch the sibling module " + testTarget.siblingModulePath + "\nchanged:\n" + drift
+    }
+  }
+
+  """
+  An SDK module should expose a `@generate` hook.
+  """
+  pub exposesGenerator(ws: Workspace!): Void @check {
+    let testTarget = harness.sdkTarget(ws)
+    let run = testTarget.runInstalled(["generate", "-l"])
+    run.assertSuccess
+    if (run.stdout.contains(testTarget.sdkInstallName + ":") == false) {
+      raise "SDK module should expose a @generate hook\ngenerators:\n" + run.stdout
+    }
+  }
+}

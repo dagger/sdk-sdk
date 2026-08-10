@@ -1,0 +1,37 @@
+"""
+Checks that a module scaffolded by the SDK behaves like any other Dagger
+module once it has been generated.
+"""
+type ModuleChecks {
+  let harness: SdkHarness!
+
+  """
+  A scaffolded module should load and serve its API after `dagger generate`.
+
+  `dagger api functions` must succeed against the scaffolded module. Starter
+  templates may expose no functions yet (the go-sdk template scaffolds an
+  empty root type), so only introspection success is required.
+  """
+  pub loads(ws: Workspace!): Void @check {
+    let testTarget = harness.sdkTarget(ws)
+    testTarget.run(["api", "functions", testTarget.moduleName]).assertSuccess
+  }
+
+  """
+  `dagger module engine required` should report a version for a scaffolded module.
+  """
+  pub engineRequiredReportsVersion(ws: Workspace!): Void @check {
+    let run = harness.sdkTarget(ws).runInModule(["module", "engine", "required"])
+    run.assertSuccess
+    if (run.stdout.trimSuffix("\n") == "") {
+      raise "module engine required should report a version"
+    }
+  }
+
+  """
+  `dagger module deps list` should succeed for a scaffolded module.
+  """
+  pub depsListSucceeds(ws: Workspace!): Void @check {
+    harness.sdkTarget(ws).runInModule(["module", "deps", "list"]).assertSuccess
+  }
+}

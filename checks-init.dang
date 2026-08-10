@@ -1,0 +1,49 @@
+"""
+Checks for `dagger module init <sdk> <name>`.
+"""
+type InitChecks {
+  let harness: SdkHarness!
+
+  """
+  `dagger module init <sdk> <name>` should scaffold a new module.
+  """
+  pub scaffoldsModule(ws: Workspace!): Void @check {
+    harness.sdkTarget(ws).initTestModule.assertSuccess
+  }
+
+  """
+  `dagger module init` should write the new module's dagger-module.toml.
+  """
+  pub writesModuleConfig(ws: Workspace!): Void @check {
+    let testTarget = harness.sdkTarget(ws)
+    let run = testTarget.initTestModule
+    run.assertSuccess
+    if (run.workspaceHasFile(testTarget.moduleConfigPath) == false) {
+      raise "module init should write " + testTarget.moduleConfigPath
+    }
+  }
+
+  """
+  `dagger module init` should install the new module in dagger.toml.
+  """
+  pub registersModule(ws: Workspace!): Void @check {
+    let testTarget = harness.sdkTarget(ws)
+    let run = testTarget.initTestModule
+    run.assertSuccess
+    if (run.workspaceFile("dagger.toml").contains("[modules." + testTarget.moduleName + "]") == false) {
+      raise "module init should install the new module in dagger.toml"
+    }
+  }
+
+  """
+  `dagger module init` should record the SDK as the new module's authoring SDK.
+  """
+  pub recordsAuthoringSdk(ws: Workspace!): Void @check {
+    let testTarget = harness.sdkTarget(ws)
+    let run = testTarget.initTestModule
+    run.assertSuccess
+    if (run.workspaceFile("dagger.toml").contains(".as-sdk.modules]]") == false) {
+      raise "module init should record an as-sdk.modules authoring entry in dagger.toml"
+    }
+  }
+}

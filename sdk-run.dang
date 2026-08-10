@@ -1,0 +1,109 @@
+"""
+Result of a black-box dagger CLI command against an SDK under test.
+"""
+type SdkRun {
+  let container: Container!
+  let args: [String!]!
+
+  """
+  The command stdout.
+  """
+  pub stdout: String! {
+    container.file("/tmp/sdk-sdk/stdout").contents
+  }
+
+  """
+  The command stderr.
+  """
+  pub stderr: String! {
+    container.file("/tmp/sdk-sdk/stderr").contents
+  }
+
+  """
+  The command exit code as decimal text.
+  """
+  pub exitCode: String! {
+    container.file("/tmp/sdk-sdk/exit-code").contents
+  }
+
+  """
+  Whether the command exited successfully.
+  """
+  pub succeeded: Boolean! {
+    exitCode == "0"
+  }
+
+  """
+  Whether the command was skipped because an earlier pipeline command failed.
+  """
+  pub skipped: Boolean! {
+    container.directory("/tmp/sdk-sdk").exists("skipped")
+  }
+
+  """
+  Fail when the command did not exit successfully.
+
+  When the command never ran because an earlier pipeline command failed, report
+  that prerequisite failure instead.
+  """
+  pub assertSuccess: Void {
+    if (skipped) {
+      raise "prerequisite command failed: " + failedCommand + "\nstderr:\n" + failedStderr
+    }
+    if (succeeded == false) {
+      raise "dagger command failed: " + toJSON(args) + "\nstderr:\n" + stderr
+    }
+    null
+  }
+
+  """
+  Fail when the command exited successfully.
+  """
+  pub assertFailure: Void {
+    if (skipped) {
+      raise "prerequisite command failed: " + failedCommand + "\nstderr:\n" + failedStderr
+    }
+    if (succeeded) {
+      raise "dagger command unexpectedly succeeded: " + toJSON(args)
+    }
+    null
+  }
+
+  """
+  Read a workspace file after the command ran.
+  """
+  pub workspaceFile(path: String!): String! {
+    container.file("/work/" + path).contents
+  }
+
+  """
+  Return true when a workspace file exists after the command ran.
+  """
+  pub workspaceHasFile(path: String!): Boolean! {
+    container.directory("/work").exists(path)
+  }
+
+  """
+  Return the git status of a workspace path after the command ran, relative to
+  the last committed snapshot. Empty when the path is untouched.
+  """
+  pub workspaceChanges(path: String!): String! {
+    container
+      .withExec(["git", "-C", "/work", "status", "--porcelain", "--", path])
+      .stdout
+  }
+
+  """
+  The first failed pipeline command, as recorded by the run wrapper.
+  """
+  let failedCommand: String! {
+    container.file("/tmp/sdk-sdk/failed-command").contents
+  }
+
+  """
+  The stderr of the first failed pipeline command.
+  """
+  let failedStderr: String! {
+    container.file("/tmp/sdk-sdk/failed-stderr").contents
+  }
+}

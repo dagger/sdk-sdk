@@ -42,10 +42,22 @@ remove existing files. The SDK must also list a `@generate` hook in
 `dagger generate -l`.
 
 Each lifecycle stage and each contract behavior is its own check, so the check
-report shows exactly what passed and what failed. All commands run through one
-pipeline: when a stage fails, its own check captures the error, and the checks
-that depend on it fail with a `prerequisite command failed` message naming that
-stage instead of repeating raw errors.
+report shows exactly what passed and what failed. Checks are grouped by the
+behavior they cover and reported as `<group>:<check>`:
+
+| Group | File | Covers |
+| --- | --- | --- |
+| `install` | `checks-install.dang` | `dagger sdk install` and `dagger sdk module-options` |
+| `init` | `checks-init.dang` | `dagger module init` and the workspace entries it writes |
+| `generation` | `checks-generate.dang` | `dagger generate` and the SDK's `@generate` hook |
+| `module` | `checks-module.dang` | the scaffolded module loading and serving its API |
+| `contract` | `checks-contract.dang` | function-level `initModule` changeset behavior |
+| `template` | `template.dang` | sdk-sdk's own scaffolding template |
+
+All commands run through one pipeline: when a stage fails, its own check
+captures the error, and the checks that depend on it fail with a
+`prerequisite command failed` message naming that stage instead of repeating
+raw errors.
 
 Configure the CLI release with the top-level `dagger-cli-version` setting; the
 default is `1.0.0-beta.9`. Individual targets accept `with-timeout` for slow

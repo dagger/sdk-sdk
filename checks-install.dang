@@ -1,0 +1,32 @@
+"""
+Checks for `dagger sdk install`.
+"""
+type InstallChecks {
+  let harness: SdkHarness!
+
+  """
+  `dagger sdk install` should accept the SDK module.
+  """
+  pub registersSdk(ws: Workspace!): Void @check {
+    harness.sdkTarget(ws).install.assertSuccess
+  }
+
+  """
+  `dagger sdk install` should mark the SDK with an as-sdk marker in dagger.toml.
+  """
+  pub marksAsSdk(ws: Workspace!): Void @check {
+    let run = harness.sdkTarget(ws).install
+    run.assertSuccess
+    if (run.workspaceFile("dagger.toml").contains("as-sdk") == false) {
+      raise "sdk install should record an as-sdk marker in dagger.toml"
+    }
+  }
+
+  """
+  `dagger sdk module-options` should introspect the SDK's initModule capability.
+  """
+  pub reportsModuleOptions(ws: Workspace!): Void @check {
+    let testTarget = harness.sdkTarget(ws)
+    testTarget.runInstalled(["sdk", "module-options", testTarget.sdkInstallName]).assertSuccess
+  }
+}

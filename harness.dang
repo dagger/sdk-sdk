@@ -1,0 +1,70 @@
+"""
+Resolution of the SDK module under test.
+
+Every check group threads this through, so locating the SDK in the workspace
+and building test targets from it stays in one place.
+"""
+type SdkHarness {
+  let daggerCliVersion: String!
+
+  """
+  Return a black-box test target for an SDK module directory view.
+  """
+  pub target(workspaceView: Directory!, sourceRootPath: String!): SdkTarget! {
+    SdkTarget(
+      workspaceView: workspaceView,
+      sourceRootPath: sourceRootPath,
+      daggerCliVersion: daggerCliVersion,
+      timeout: "10m",
+    )
+  }
+
+  """
+  Return the SDK module under test prepared by the workspace polyfill.
+  """
+  pub sdkTarget(ws: Workspace!): SdkTarget! {
+    let module = sdkModule(ws)
+    target(module.workspaceView, module.sourceRootPath)
+  }
+
+  """
+  Return the directory view a function-level contract target mounts.
+
+  The view keeps the target module's config at the view root so the CLI can
+  load it from the workspace root.
+  """
+  pub contractView(ws: Workspace!): Directory! {
+    let module = sdkModule(ws)
+    let view = module.workspaceView
+
+    if (module.sourceRootPath == ".") {
+      view
+    } else if (view.exists(module.sourceRootPath + "/dagger.json")) {
+      view.withFile("dagger.json", view.file(module.sourceRootPath + "/dagger.json"))
+    } else {
+      view.withFile("dagger-module.toml", view.file(module.sourceRootPath + "/dagger-module.toml"))
+    }
+  }
+
+  """
+  Return the workspace-relative source root path of the SDK module under test.
+  """
+  pub sourceRootPath(ws: Workspace!): String! {
+    sdkModule(ws).sourceRootPath
+  }
+
+  """
+  Return the SDK module at the workspace root.
+  """
+  let sdkModule(ws: Workspace!): PolyfillModuleSource! {
+    let configs = ws.directory("/", include: ["dagger.json", "dagger-module.toml"])
+
+    if (configs.exists("dagger.json") == false and configs.exists("dagger-module.toml") == false) {
+      raise noSdkModuleMessage
+    }
+
+    polyfill.workspace(ws).moduleSource(".")
+  }
+
+  let noSdkModuleMessage: String! = "no SDK module detected at the workspace root. Run from an SDK module workspace, or pass one with -W <sdk-repo>"
+}
