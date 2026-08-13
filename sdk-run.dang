@@ -94,6 +94,22 @@ type SdkRun {
   }
 
   """
+  Return the git status of everything a `module init` run wrote outside the new
+  module's own directory, ignoring the workspace config and lock file it is
+  meant to update. Empty when the module's files landed with its config.
+  """
+  pub workspaceChangesOutsideModule(modulePath: String!, configDir: String!): String! {
+    container
+      .withExec([
+        "git", "-C", "/work", "status", "--porcelain", "--untracked-files=all", "--", ".",
+        ":(exclude)" + modulePath,
+        ":(exclude,glob)" + configDir + "/*.toml",
+        ":(exclude,glob)" + configDir + "/*.lock",
+      ])
+      .stdout
+  }
+
+  """
   The first failed pipeline command, as recorded by the run wrapper.
   """
   let failedCommand: String! {

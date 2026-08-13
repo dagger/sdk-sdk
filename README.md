@@ -48,6 +48,25 @@ A second workspace exercises local path dependencies — `chain-a` depends on
   depend on is generated, so an SDK that widens generation to the whole
   workspace fails here.
 
+A third workspace exercises the monorepo layout — `dagger.toml` in a `common/`
+subdirectory of the git root, with everything driven from that subdirectory
+([dagger#13889](https://github.com/dagger/dagger/issues/13889)):
+
+- `dagger sdk install` registers the SDK in `common/dagger.toml`.
+- `dagger module init` scaffolds a module under `common/.dagger/modules/`,
+  writes nothing outside it, and the module loads afterwards. The workspace
+  root is the git root, so the default module path the engine hands the SDK is
+  not under the caller's cwd: an SDK that reads it cwd-relative refuses it, and
+  one that reads it root-relative writes the module a directory above where
+  `common/dagger.toml` registers it.
+- `dagger module init --path` keeps the whole module at that path. This is the
+  quiet half: an explicit path is workspace-root-relative, so a path naming the
+  config directory is also under the caller's cwd read the other way, and
+  nothing refuses it — the engine's module config and the SDK's files just land
+  in two different directories. An explicit path deliberately skips the
+  `[modules.<name>]` entry that the default layout writes, here as at the
+  workspace root, so there is nothing to load by name.
+
 Function-level contract checks additionally call the SDK's `initModule`
 directly (always with an explicit `--path`, as the engine does) and inspect
 the returned changesets: `initModule` must seed at least one file, must not
@@ -66,6 +85,7 @@ behavior they cover and reported as `<group>:<check>`:
 | `generation` | `checks-generate.dang` | `dagger generate` and the SDK's `@generate` hook |
 | `module` | `checks-module.dang` | the scaffolded module loading and serving its API |
 | `chain` | `checks-chain.dang` | local path dependencies and cwd-anchored generation |
+| `monorepo` | `checks-monorepo.dang` | a workspace config in a subdirectory of the git root |
 | `contract` | `checks-contract.dang` | function-level `initModule` changeset behavior |
 | `template` | `template.dang` | sdk-sdk's own scaffolding template |
 

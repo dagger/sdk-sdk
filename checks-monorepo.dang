@@ -1,0 +1,104 @@
+"""
+Checks for workspaces whose dagger.toml lives in a subdirectory of the git
+root, the layout of a monorepo where several project workspaces share one
+repository.
+
+The workspace root is the git root, so the caller's cwd sits below the root
+instead of at it. Module paths cross the engine <-> SDK boundary
+workspace-root-relative, so an SDK that reads them relative to the caller's cwd
+either refuses the path outright or lands its files in a different directory
+than the module config the engine writes.
+
+See https://github.com/dagger/dagger/issues/13889.
+"""
+type MonorepoChecks {
+  let harness: SdkHarness!
+
+  """
+  `dagger sdk install` should register the SDK in a subdirectory config.
+  """
+  pub installsFromSubdirConfig(ws: Workspace!): Void @check {
+    let testTarget = harness.sdkTarget(ws)
+    let run = testTarget.installInSubdir
+    run.assertSuccess
+
+    if (run.workspaceFile(testTarget.subdirWorkspaceConfigPath).contains(testTarget.sdkInstallName) == false) {
+      raise "sdk install should register the SDK in " + testTarget.subdirWorkspaceConfigPath
+    }
+  }
+
+  """
+  `dagger module init` should scaffold a module from a subdirectory config.
+
+  This is the reported failure: the engine hands the SDK the default module
+  path workspace-root-relative, and a cwd-scoped SDK rejects it as being
+  outside its changeset root.
+  """
+  pub scaffoldsModuleFromSubdirConfig(ws: Workspace!): Void @check {
+    let testTarget = harness.sdkTarget(ws)
+    let run = testTarget.initSubdirModule
+    run.assertSuccess
+
+    if (run.workspaceHasFile(testTarget.subdirModuleConfigPath) == false) {
+      raise "module init from " + testTarget.subdirWorkspaceDir + " should write " + testTarget.subdirModuleConfigPath
+    }
+  }
+
+  """
+  `dagger module init` should keep the whole module under the config directory.
+
+  The engine's config changeset is applied workspace-root-relative while the
+  SDK's file changeset is applied relative to the caller's cwd, so the two
+  halves of a new module can land in different directories.
+  """
+  pub keepsModuleUnderSubdirConfig(ws: Workspace!): Void @check {
+    let testTarget = harness.sdkTarget(ws)
+    let run = testTarget.initSubdirModule
+    run.assertSuccess
+
+    let leaked = run.workspaceChangesOutsideModule(testTarget.subdirModulePath, testTarget.subdirWorkspaceDir)
+    if (leaked != "") {
+      raise "module init from " + testTarget.subdirWorkspaceDir + " should write nothing outside " + testTarget.subdirModulePath + "\nchanged:\n" + leaked
+    }
+  }
+
+  """
+  A module scaffolded from a subdirectory config should load and serve its API.
+
+  A module split across two directories still registers in dagger.toml, so
+  loading it is what proves both halves ended up together.
+  """
+  pub subdirModuleLoads(ws: Workspace!): Void @check {
+    let testTarget = harness.sdkTarget(ws)
+    testTarget.generateSubdirWorkspace.assertSuccess
+    testTarget.runInSubdir(["api", "functions", testTarget.subdirModuleName]).assertSuccess
+  }
+
+  """
+  `dagger module init --path` from a subdirectory config should keep the whole
+  module at that path.
+
+  This is the half of the layout that fails quietly. An explicit path is
+  workspace-root-relative, so a path naming the config directory is also under
+  the caller's cwd read the other way: nothing refuses it, and the engine's
+  module config and the SDK's files land in two different directories.
+
+  An explicit path deliberately skips the `[modules.<name>]` entry that the
+  default layout writes, here as at the workspace root, so the module is
+  authored rather than installed and there is nothing to load by name.
+  """
+  pub explicitPathKeepsModuleWhole(ws: Workspace!): Void @check {
+    let testTarget = harness.sdkTarget(ws)
+    let run = testTarget.initSubdirModuleAtPath
+    run.assertSuccess
+
+    if (run.workspaceHasFile(testTarget.subdirPathModuleConfigPath) == false) {
+      raise "module init --path " + testTarget.subdirPathArg + " should write " + testTarget.subdirPathModuleConfigPath
+    }
+
+    let leaked = run.workspaceChangesOutsideModule(testTarget.subdirPathArg, testTarget.subdirWorkspaceDir)
+    if (leaked != "") {
+      raise "module init --path " + testTarget.subdirPathArg + " should write nothing outside it\nchanged:\n" + leaked
+    }
+  }
+}
