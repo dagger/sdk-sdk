@@ -50,22 +50,23 @@ A second workspace exercises local path dependencies — `chain-a` depends on
 
 A third workspace exercises the monorepo layout — `dagger.toml` in a `common/`
 subdirectory of the git root, with everything driven from that subdirectory
-([dagger#13889](https://github.com/dagger/dagger/issues/13889)):
+([dagger#13889](https://github.com/dagger/dagger/issues/13889)). The workspace
+root is the git root, so the caller's cwd sits below it, and init changesets
+are applied at the root. The SDK is handed module paths relative to that root
+and has to write its files there:
 
 - `dagger sdk install` registers the SDK in `common/dagger.toml`.
 - `dagger module init` scaffolds a module under `common/.dagger/modules/`,
-  writes nothing outside it, and the module loads afterwards. The workspace
-  root is the git root, so the default module path the engine hands the SDK is
-  not under the caller's cwd: an SDK that reads it cwd-relative refuses it, and
-  one that reads it root-relative writes the module a directory above where
-  `common/dagger.toml` registers it.
-- `dagger module init --path` keeps the whole module at that path. This is the
-  quiet half: an explicit path is workspace-root-relative, so a path naming the
-  config directory is also under the caller's cwd read the other way, and
-  nothing refuses it — the engine's module config and the SDK's files just land
-  in two different directories. An explicit path deliberately skips the
-  `[modules.<name>]` entry that the default layout writes, here as at the
-  workspace root, so there is nothing to load by name.
+  writes nothing outside it, and the module loads afterwards. An SDK that
+  rebases the path it is handed onto the caller's cwd writes its half a
+  directory below the `dagger-module.toml` the engine writes.
+- `dagger module init --path` resolves against the caller's cwd, so a relative
+  path lands the whole module under `common/`. A leading `/` means the
+  workspace root instead — the one path shape that puts a new module somewhere
+  the caller's cwd does not contain, which a cwd-scoped SDK cannot stage at
+  all. Either way an explicit path deliberately skips the `[modules.<name>]`
+  entry that the default layout writes, here as at the workspace root, so there
+  is nothing to load by name.
 
 Function-level contract checks additionally call the SDK's `initModule`
 directly (always with an explicit `--path`, as the engine does) and inspect

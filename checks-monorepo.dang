@@ -5,11 +5,13 @@ repository.
 
 The workspace root is the git root, so the caller's cwd sits below the root
 instead of at it. Module paths cross the engine <-> SDK boundary
-workspace-root-relative, so an SDK that reads them relative to the caller's cwd
-either refuses the path outright or lands its files in a different directory
-than the module config the engine writes.
+workspace-root-relative, and init changesets are applied at the workspace root,
+so an SDK that rebases those paths onto the caller's cwd either refuses one
+outright or lands its files in a different directory than the module config the
+engine writes.
 
-See https://github.com/dagger/dagger/issues/13889.
+See https://github.com/dagger/dagger/issues/13889, fixed by
+https://github.com/dagger/dagger/pull/13890.
 """
 type MonorepoChecks {
   let harness: SdkHarness!
@@ -30,9 +32,8 @@ type MonorepoChecks {
   """
   `dagger module init` should scaffold a module from a subdirectory config.
 
-  This is the reported failure: the engine hands the SDK the default module
-  path workspace-root-relative, and a cwd-scoped SDK rejects it as being
-  outside its changeset root.
+  The default module path is anchored at the directory holding the dagger.toml
+  being edited, and reaches the SDK workspace-root-relative.
   """
   pub scaffoldsModuleFromSubdirConfig(ws: Workspace!): Void @check {
     let testTarget = harness.sdkTarget(ws)
@@ -47,9 +48,9 @@ type MonorepoChecks {
   """
   `dagger module init` should keep the whole module under the config directory.
 
-  The engine's config changeset is applied workspace-root-relative while the
-  SDK's file changeset is applied relative to the caller's cwd, so the two
-  halves of a new module can land in different directories.
+  Init applies both changesets at the workspace root, so an SDK that rebases
+  the path it is handed onto the caller's cwd splits the new module: engine
+  config in one directory, sources in another.
   """
   pub keepsModuleUnderSubdirConfig(ws: Workspace!): Void @check {
     let testTarget = harness.sdkTarget(ws)
@@ -75,13 +76,13 @@ type MonorepoChecks {
   }
 
   """
-  `dagger module init --path` from a subdirectory config should keep the whole
-  module at that path.
+  A relative `dagger module init --path` should keep the whole module under the
+  caller's cwd.
 
-  This is the half of the layout that fails quietly. An explicit path is
-  workspace-root-relative, so a path naming the config directory is also under
-  the caller's cwd read the other way: nothing refuses it, and the engine's
-  module config and the SDK's files land in two different directories.
+  `--path` reads like every other workspace path a user types: relative to
+  where they are standing. The SDK is handed the resolved path
+  workspace-root-relative, so the two halves of the module land together only
+  if it writes them there.
 
   An explicit path deliberately skips the `[modules.<name>]` entry that the
   default layout writes, here as at the workspace root, so the module is
@@ -93,12 +94,36 @@ type MonorepoChecks {
     run.assertSuccess
 
     if (run.workspaceHasFile(testTarget.subdirPathModuleConfigPath) == false) {
-      raise "module init --path " + testTarget.subdirPathArg + " should write " + testTarget.subdirPathModuleConfigPath
+      raise "module init --path " + testTarget.subdirPathArg + " from " + testTarget.subdirWorkspaceDir + " should write " + testTarget.subdirPathModuleConfigPath
     }
 
-    let leaked = run.workspaceChangesOutsideModule(testTarget.subdirPathArg, testTarget.subdirWorkspaceDir)
+    let leaked = run.workspaceChangesOutsideModule(testTarget.subdirPathModulePath, testTarget.subdirWorkspaceDir)
     if (leaked != "") {
-      raise "module init --path " + testTarget.subdirPathArg + " should write nothing outside it\nchanged:\n" + leaked
+      raise "module init --path " + testTarget.subdirPathArg + " should write nothing outside " + testTarget.subdirPathModulePath + "\nchanged:\n" + leaked
+    }
+  }
+
+  """
+  A root-anchored `dagger module init --path` should keep the whole module at
+  the workspace root.
+
+  A leading `/` means the workspace root, so this is the one path shape that
+  puts a new module somewhere the caller's cwd does not contain. An SDK that
+  rebases the path it is handed onto that cwd has nowhere to put the files and
+  refuses the init outright.
+  """
+  pub rootedPathAnchorsModuleAtRoot(ws: Workspace!): Void @check {
+    let testTarget = harness.sdkTarget(ws)
+    let run = testTarget.initSubdirModuleAtRootedPath
+    run.assertSuccess
+
+    if (run.workspaceHasFile(testTarget.subdirRootedModuleConfigPath) == false) {
+      raise "module init --path " + testTarget.subdirRootedPathArg + " from " + testTarget.subdirWorkspaceDir + " should write " + testTarget.subdirRootedModuleConfigPath
+    }
+
+    let leaked = run.workspaceChangesOutsideModule(testTarget.subdirRootedModulePath, testTarget.subdirWorkspaceDir)
+    if (leaked != "") {
+      raise "module init --path " + testTarget.subdirRootedPathArg + " should write nothing outside " + testTarget.subdirRootedModulePath + "\nchanged:\n" + leaked
     }
   }
 }

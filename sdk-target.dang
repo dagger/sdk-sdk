@@ -59,6 +59,12 @@ type SdkTarget {
   pub subdirPathModuleName: String! = "subdir-path-mod"
 
   """
+  Name of the module scaffolded from the subdirectory workspace config with a
+  root-anchored `--path`.
+  """
+  pub subdirRootedModuleName: String! = "subdir-rooted-mod"
+
+  """
   Return a copy of this target with a different command timeout.
   """
   pub withTimeout(timeout: String!): SdkTarget! {
@@ -135,20 +141,52 @@ type SdkTarget {
   }
 
   """
-  Path passed to `dagger module init --path` from the subdirectory workspace,
-  the one from the issue report: a path that is under the caller's cwd only
-  when read workspace-root-relative.
+  Path passed to `dagger module init --path` from the subdirectory workspace.
+  Relative, so it names a directory under the caller's cwd.
   """
   pub subdirPathArg: String! {
+    subdirPathModuleName
+  }
+
+  """
+  Workspace-root-relative path of the module scaffolded with a relative
+  `--path`, which resolves against the caller's cwd.
+  """
+  pub subdirPathModulePath: String! {
     subdirWorkspaceDir + "/" + subdirPathModuleName
   }
 
   """
-  Workspace-root-relative path of the config for the module scaffolded with an
-  explicit `--path`.
+  Workspace-root-relative path of the config for the module scaffolded with a
+  relative `--path`.
   """
   pub subdirPathModuleConfigPath: String! {
-    subdirPathArg + "/dagger-module.toml"
+    subdirPathModulePath + "/dagger-module.toml"
+  }
+
+  """
+  Path passed to `dagger module init --path` to anchor the module at the
+  workspace root. The leading slash means the workspace root, so this names a
+  directory the caller's cwd does not contain.
+  """
+  pub subdirRootedPathArg: String! {
+    "/" + subdirRootedModuleName
+  }
+
+  """
+  Workspace-root-relative path of the module scaffolded with a root-anchored
+  `--path`.
+  """
+  pub subdirRootedModulePath: String! {
+    subdirRootedModuleName
+  }
+
+  """
+  Workspace-root-relative path of the config for the module scaffolded with a
+  root-anchored `--path`.
+  """
+  pub subdirRootedModuleConfigPath: String! {
+    subdirRootedModulePath + "/dagger-module.toml"
   }
 
   """
@@ -214,11 +252,19 @@ type SdkTarget {
   }
 
   """
-  Run `dagger module init --path` from a subdirectory workspace config and
-  capture the result.
+  Run `dagger module init --path` with a relative path from a subdirectory
+  workspace config and capture the result.
   """
   pub initSubdirModuleAtPath: SdkRun! {
     SdkRun(container: subdirPathInitializedState, args: subdirPathInitArgs)
+  }
+
+  """
+  Run `dagger module init --path` with a root-anchored path from a
+  subdirectory workspace config and capture the result.
+  """
+  pub initSubdirModuleAtRootedPath: SdkRun! {
+    SdkRun(container: subdirRootedPathInitializedState, args: subdirRootedPathInitArgs)
   }
 
   """
@@ -431,13 +477,22 @@ type SdkTarget {
   }
 
   """
-  Subdirectory workspace state after `dagger module init --path`.
+  Subdirectory workspace state after `dagger module init --path` with a
+  relative path.
 
   It branches off the installed state rather than the initialized one, so the
   default-path init failing does not mask what an explicit path does.
   """
   let subdirPathInitializedState: Container! {
     pipe(subdirInstalledState, subdirWorkdir, subdirPathInitArgs)
+  }
+
+  """
+  Subdirectory workspace state after `dagger module init --path` with a
+  root-anchored path.
+  """
+  let subdirRootedPathInitializedState: Container! {
+    pipe(subdirInstalledState, subdirWorkdir, subdirRootedPathInitArgs)
   }
 
   """
@@ -472,6 +527,10 @@ type SdkTarget {
 
   let subdirPathInitArgs: [String!]! {
     ["module", "init", sdkInstallName, subdirPathModuleName, "--path", subdirPathArg]
+  }
+
+  let subdirRootedPathInitArgs: [String!]! {
+    ["module", "init", sdkInstallName, subdirRootedModuleName, "--path", subdirRootedPathArg]
   }
 
   """
