@@ -8,8 +8,8 @@ type ModTestE2e {
   mod-test should call a target module through the Dagger CLI and assert JSON strings.
   """
   pub jsonStringCheck(ws: Workspace!): Void @check {
-    let module = polyfill.workspace(ws).moduleSource(echoModulePath)
-    let target = modTest.target(module.workspaceView, module.sourceRootPath)
+    let module = ws.moduleSource(echoModulePath)
+    let target = modTest.target(module.contextDirectory, module.sourceRootSubpath)
     target.assertJsonString(["echo", "--value", "hello"], "hello")
   }
 
@@ -17,8 +17,8 @@ type ModTestE2e {
   mod-test should assert JSON string-list output.
   """
   pub jsonStringListCheck(ws: Workspace!): Void @check {
-    let module = polyfill.workspace(ws).moduleSource(echoModulePath)
-    let target = modTest.target(module.workspaceView, module.sourceRootPath)
+    let module = ws.moduleSource(echoModulePath)
+    let target = modTest.target(module.contextDirectory, module.sourceRootSubpath)
 
     target.assertJsonListContains(["values", "--first", "one", "--second", "two"], "two")
     target.assertJsonListEmpty(["empty"])
@@ -28,8 +28,8 @@ type ModTestE2e {
   mod-test should assert failing target calls.
   """
   pub failureCheck(ws: Workspace!): Void @check {
-    let module = polyfill.workspace(ws).moduleSource(echoModulePath)
-    let target = modTest.target(module.workspaceView, module.sourceRootPath)
+    let module = ws.moduleSource(echoModulePath)
+    let target = modTest.target(module.contextDirectory, module.sourceRootSubpath)
 
     target.assertFailure(["fail"], "target fail should exit non-zero")
   }

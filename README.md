@@ -91,7 +91,7 @@ Individual targets accept `with-timeout` for slow SDKs (the default command
 timeout is `10m`). Custom checks can reuse the harness through `target`:
 
 ```dang
-let testTarget = sdkSdk.target(module.workspaceView, module.sourceRootPath)
+let testTarget = sdkSdk.target(module.contextDirectory, module.sourceRootSubpath)
 testTarget.install.assertSuccess
 testTarget.runInModule(["module", "deps", "list"]).assertSuccess
 ```

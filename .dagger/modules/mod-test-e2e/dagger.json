@@ -1,6 +1,6 @@
 {
   "name": "mod-test-e2e",
-  "engineVersion": "v0.20.8",
+  "engineVersion": "v1.0.0-beta.10",
   "sdk": {
     "source": "dang"
   },
@@ -8,10 +8,6 @@
     {
       "name": "mod-test",
       "source": "../../../mod-test"
-    },
-    {
-      "name": "polyfill",
-      "source": "github.com/dagger/polyfill@main"
     }
   ]
 }

@@ -23,11 +23,11 @@ type SdkHarness {
   }
 
   """
-  Return the SDK module under test prepared by the workspace polyfill.
+  Return the SDK module under test from the native workspace API.
   """
   pub sdkTarget(ws: Workspace!): SdkTarget! {
     let module = sdkModule(ws)
-    target(module.workspaceView, module.sourceRootPath)
+    target(module.contextDirectory, module.sourceRootSubpath)
   }
 
   """
@@ -38,14 +38,14 @@ type SdkHarness {
   """
   pub contractView(ws: Workspace!): Directory! {
     let module = sdkModule(ws)
-    let view = module.workspaceView
+    let view = module.contextDirectory
 
-    if (module.sourceRootPath == ".") {
+    if (module.sourceRootSubpath == ".") {
       view
-    } else if (view.exists(module.sourceRootPath + "/dagger.json")) {
-      view.withFile("dagger.json", view.file(module.sourceRootPath + "/dagger.json"))
+    } else if (view.exists(module.sourceRootSubpath + "/dagger.json")) {
+      view.withFile("dagger.json", view.file(module.sourceRootSubpath + "/dagger.json"))
     } else {
-      view.withFile("dagger-module.toml", view.file(module.sourceRootPath + "/dagger-module.toml"))
+      view.withFile("dagger-module.toml", view.file(module.sourceRootSubpath + "/dagger-module.toml"))
     }
   }
 
@@ -53,20 +53,20 @@ type SdkHarness {
   Return the workspace-relative source root path of the SDK module under test.
   """
   pub sourceRootPath(ws: Workspace!): String! {
-    sdkModule(ws).sourceRootPath
+    sdkModule(ws).sourceRootSubpath
   }
 
   """
   Return the SDK module at the workspace root.
   """
-  let sdkModule(ws: Workspace!): PolyfillModuleSource! {
+  let sdkModule(ws: Workspace!): ModuleSource! {
     let configs = ws.directory("/", include: ["dagger.json", "dagger-module.toml"])
 
     if (configs.exists("dagger.json") == false and configs.exists("dagger-module.toml") == false) {
       raise noSdkModuleMessage
     }
 
-    polyfill.workspace(ws).moduleSource(".")
+    ws.moduleSource("/")
   }
 
   let noSdkModuleMessage: String! = "no SDK module detected at the workspace root. Run from an SDK module workspace, or pass one with -W <sdk-repo>"

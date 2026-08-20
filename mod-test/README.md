@@ -21,8 +21,8 @@ Example:
 
 ```dang
 pub smoke(ws: Workspace!): Void @check {
-  let module = polyfill.workspace(ws).moduleSource(".dagger/modules/fixture")
-  let target = modTest.target(module.workspaceView, module.sourceRootPath)
+  let module = ws.moduleSource(".dagger/modules/fixture")
+  let target = modTest.target(module.contextDirectory, module.sourceRootSubpath)
 
   target.assertJsonString(["echo", "--value", "hello"], "hello")
   target.assertFailure(["fail"], "fail should return a non-zero status")
