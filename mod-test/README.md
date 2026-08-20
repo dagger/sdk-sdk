@@ -6,8 +6,10 @@ Lightweight black-box testing helpers for Dagger modules.
 release from `dl.dagger.io`, then runs readable `dagger api call -j` commands
 against the target module.
 
-Configure the CLI release with the top-level `dagger-cli-version` setting. The
-default is `1.0.0-beta.9`.
+Configure the CLI release with the top-level `daggerCliVersion` setting, either
+through `[modules.<alias>.settings]` in `dagger.toml` or by constructing the
+module directly — `modTest(daggerCliVersion: "1.0.0-beta.10").target(...)`. The
+default is `1.0.0-beta.10`.
 
 Callers provide:
 
@@ -35,5 +37,6 @@ The public API follows Go test-style semantics:
   success.
 - `assertSuccess`, `assertFailure`, `assertOutput`, and `assertJson*` helpers
   keep individual checks short and focused. Assertion failures report the
-  caller's curated message; use `tryCall` when a check needs raw stdout or
-  stderr.
+  caller's curated message; when the call itself failed they append its exit
+  code and stderr, so a command that never ran is not read as a violated
+  expectation. Use `tryCall` when a check needs raw stdout or stderr.

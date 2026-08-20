@@ -5,7 +5,10 @@ Every check group threads this through, so locating the SDK in the workspace
 and building test targets from it stays in one place.
 """
 type SdkHarness {
-  let daggerCliVersion: String!
+  """
+  Dagger CLI release version every check group drives.
+  """
+  pub daggerCliVersion: String!
 
   """
   Return a black-box test target for an SDK module directory view.

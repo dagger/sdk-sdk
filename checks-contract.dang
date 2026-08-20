@@ -69,9 +69,13 @@ type ContractChecks {
 
   """
   Return a function-level contract target for the SDK module under test.
+
+  The target runs the same CLI release as the black-box groups: an SDK whose
+  committed artifacts target a given engine only loads under a matching CLI.
   """
   let contractTarget(ws: Workspace!): ModTestTarget! {
-    modTest.target(harness.contractView(ws), harness.sourceRootPath(ws))
+    modTest(daggerCliVersion: harness.daggerCliVersion)
+      .target(harness.contractView(ws), harness.sourceRootPath(ws))
   }
 
   # The engine always passes an explicit path when it drives initModule, so the

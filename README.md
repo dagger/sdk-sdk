@@ -74,10 +74,21 @@ captures the error, and the checks that depend on it fail with a
 `prerequisite command failed` message naming that stage instead of repeating
 raw errors.
 
-Configure the CLI release with the top-level `dagger-cli-version` setting; the
-default is `1.0.0-beta.9`. Individual targets accept `with-timeout` for slow
-SDKs (the default command timeout is `10m`). Custom checks can reuse the
-harness through `target`:
+Every group — the black-box lifecycle checks and the function-level `contract`
+checks alike — drives the CLI release named by the `daggerCliVersion` setting;
+the default is `1.0.0-beta.10`. An SDK whose committed artifacts target a
+specific engine release pins the CLI in its workspace `dagger.toml`:
+
+```toml
+[modules.sdk-sdk]
+source = "github.com/dagger/sdk-sdk"
+
+[modules.sdk-sdk.settings]
+daggerCliVersion = "1.0.0-beta.10"
+```
+
+Individual targets accept `with-timeout` for slow SDKs (the default command
+timeout is `10m`). Custom checks can reuse the harness through `target`:
 
 ```dang
 let testTarget = sdkSdk.target(module.workspaceView, module.sourceRootPath)
