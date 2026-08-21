@@ -15,7 +15,7 @@ and `@generate` hooks directly and inspect the returned changesets.
 
 Checks are grouped by the behavior they cover and reported as
 `<group>:<check>`: `install`, `init`, `generation`, `module`, `chain`,
-`contract`, and `template`.
+`monorepo`, `contract`, and `template`.
 
 Under CLI 1.0 the engine owns module bookkeeping (dagger-module.toml, workspace
 config, dependency and engine-version edits). An SDK module implements only
@@ -110,6 +110,13 @@ type SdkSdk {
   """
   pub chain: ChainChecks! {
     ChainChecks(harness: harness)
+  }
+
+  """
+  Checks for workspaces whose config lives in a subdirectory of the git root.
+  """
+  pub monorepo: MonorepoChecks! {
+    MonorepoChecks(harness: harness)
   }
 
   """

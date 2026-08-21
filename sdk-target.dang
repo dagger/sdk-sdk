@@ -42,6 +42,29 @@ type SdkTarget {
   pub chainLeafName: String! = "chain-c"
 
   """
+  Directory holding the workspace config in the monorepo layout, a
+  subdirectory of the git root rather than the root itself.
+  """
+  pub subdirWorkspaceDir: String! = "common"
+
+  """
+  Name of the module scaffolded from the subdirectory workspace config.
+  """
+  pub subdirModuleName: String! = "subdir-mod"
+
+  """
+  Name of the module scaffolded from the subdirectory workspace config with an
+  explicit `--path`.
+  """
+  pub subdirPathModuleName: String! = "subdir-path-mod"
+
+  """
+  Name of the module scaffolded from the subdirectory workspace config with a
+  root-anchored `--path`.
+  """
+  pub subdirRootedModuleName: String! = "subdir-rooted-mod"
+
+  """
   Return a copy of this target with a different command timeout.
   """
   pub withTimeout(timeout: String!): SdkTarget! {
@@ -96,6 +119,77 @@ type SdkTarget {
   }
 
   """
+  Workspace-root-relative path of the subdirectory workspace config.
+  """
+  pub subdirWorkspaceConfigPath: String! {
+    subdirWorkspaceDir + "/dagger.toml"
+  }
+
+  """
+  Workspace-root-relative path of the module scaffolded from the subdirectory
+  workspace config.
+  """
+  pub subdirModulePath: String! {
+    subdirWorkspaceDir + "/.dagger/modules/" + subdirModuleName
+  }
+
+  """
+  Workspace-root-relative path of the subdirectory module's config.
+  """
+  pub subdirModuleConfigPath: String! {
+    subdirModulePath + "/dagger-module.toml"
+  }
+
+  """
+  Path passed to `dagger module init --path` from the subdirectory workspace.
+  Relative, so it names a directory under the caller's cwd.
+  """
+  pub subdirPathArg: String! {
+    subdirPathModuleName
+  }
+
+  """
+  Workspace-root-relative path of the module scaffolded with a relative
+  `--path`, which resolves against the caller's cwd.
+  """
+  pub subdirPathModulePath: String! {
+    subdirWorkspaceDir + "/" + subdirPathModuleName
+  }
+
+  """
+  Workspace-root-relative path of the config for the module scaffolded with a
+  relative `--path`.
+  """
+  pub subdirPathModuleConfigPath: String! {
+    subdirPathModulePath + "/dagger-module.toml"
+  }
+
+  """
+  Path passed to `dagger module init --path` to anchor the module at the
+  workspace root. The leading slash means the workspace root, so this names a
+  directory the caller's cwd does not contain.
+  """
+  pub subdirRootedPathArg: String! {
+    "/" + subdirRootedModuleName
+  }
+
+  """
+  Workspace-root-relative path of the module scaffolded with a root-anchored
+  `--path`.
+  """
+  pub subdirRootedModulePath: String! {
+    subdirRootedModuleName
+  }
+
+  """
+  Workspace-root-relative path of the config for the module scaffolded with a
+  root-anchored `--path`.
+  """
+  pub subdirRootedModuleConfigPath: String! {
+    subdirRootedModulePath + "/dagger-module.toml"
+  }
+
+  """
   Run `dagger sdk install` for the SDK under test and capture the result.
   """
   pub install: SdkRun! {
@@ -142,6 +236,46 @@ type SdkTarget {
   }
 
   """
+  Run `dagger sdk install` from a workspace config that lives in a
+  subdirectory of the git root, and capture the result.
+  """
+  pub installInSubdir: SdkRun! {
+    SdkRun(container: subdirInstalledState, args: installArgs)
+  }
+
+  """
+  Run `dagger module init` from a subdirectory workspace config and capture the
+  result.
+  """
+  pub initSubdirModule: SdkRun! {
+    SdkRun(container: subdirInitializedState, args: subdirInitArgs)
+  }
+
+  """
+  Run `dagger module init --path` with a relative path from a subdirectory
+  workspace config and capture the result.
+  """
+  pub initSubdirModuleAtPath: SdkRun! {
+    SdkRun(container: subdirPathInitializedState, args: subdirPathInitArgs)
+  }
+
+  """
+  Run `dagger module init --path` with a root-anchored path from a
+  subdirectory workspace config and capture the result.
+  """
+  pub initSubdirModuleAtRootedPath: SdkRun! {
+    SdkRun(container: subdirRootedPathInitializedState, args: subdirRootedPathInitArgs)
+  }
+
+  """
+  Run `dagger generate` from a subdirectory workspace config and capture the
+  result.
+  """
+  pub generateSubdirWorkspace: SdkRun! {
+    SdkRun(container: subdirGeneratedState, args: generateArgs)
+  }
+
+  """
   Run a dagger command from the workspace root after the SDK is installed.
   """
   pub runInstalled(args: [String!]!): SdkRun! {
@@ -162,6 +296,14 @@ type SdkTarget {
   """
   pub runAfterChainLeafGenerate(args: [String!]!): SdkRun! {
     runOn(chainGeneratedFromLeafState, "/work", args)
+  }
+
+  """
+  Run a dagger command from a subdirectory workspace config after its module is
+  scaffolded and generated.
+  """
+  pub runInSubdir(args: [String!]!): SdkRun! {
+    runOn(subdirGeneratedState, subdirWorkdir, args)
   }
 
   """
@@ -290,6 +432,77 @@ type SdkTarget {
   }
 
   """
+  Scratch workspace whose dagger.toml sits in a subdirectory of the git root,
+  the layout of a monorepo holding several project workspaces.
+
+  The SDK is vendored under that subdirectory, so the config location is the
+  only thing that differs from the root workspace. Everything is committed
+  before the first command, so later git status calls see only what the
+  commands wrote.
+  """
+  let subdirWorkspace: Container! {
+    runner
+      .withDirectory(subdirWorkdir + "/" + vendorRoot, workspaceView, exclude: [".git", "**/.git"])
+      .withNewFile("/work/" + subdirWorkspaceConfigPath, "# Dagger workspace configuration\n")
+      .withWorkdir("/work")
+      .withExec(["git", "init", "-q"])
+      .withExec(["git", "add", "-A"])
+      .withExec([
+        "git",
+        "-c", "user.email=sdk-sdk@dagger.io",
+        "-c", "user.name=sdk-sdk",
+        "commit", "-q", "--allow-empty", "-m", "sdk-sdk subdirectory workspace",
+      ])
+  }
+
+  """
+  Subdirectory workspace state after `dagger sdk install`.
+  """
+  let subdirInstalledState: Container! {
+    pipe(subdirWorkspace, subdirWorkdir, installArgs)
+  }
+
+  """
+  Subdirectory workspace state after `dagger module init`.
+  """
+  let subdirInitializedState: Container! {
+    pipe(subdirInstalledState, subdirWorkdir, subdirInitArgs)
+  }
+
+  """
+  Subdirectory workspace state after `dagger generate`.
+  """
+  let subdirGeneratedState: Container! {
+    pipe(subdirInitializedState, subdirWorkdir, generateArgs)
+  }
+
+  """
+  Subdirectory workspace state after `dagger module init --path` with a
+  relative path.
+
+  It branches off the installed state rather than the initialized one, so the
+  default-path init failing does not mask what an explicit path does.
+  """
+  let subdirPathInitializedState: Container! {
+    pipe(subdirInstalledState, subdirWorkdir, subdirPathInitArgs)
+  }
+
+  """
+  Subdirectory workspace state after `dagger module init --path` with a
+  root-anchored path.
+  """
+  let subdirRootedPathInitializedState: Container! {
+    pipe(subdirInstalledState, subdirWorkdir, subdirRootedPathInitArgs)
+  }
+
+  """
+  Container path of the subdirectory holding the workspace config.
+  """
+  let subdirWorkdir: String! {
+    "/work/" + subdirWorkspaceDir
+  }
+
+  """
   Workspace-relative path of the vendored SDK module source.
   """
   let sdkPath: String! {
@@ -306,6 +519,18 @@ type SdkTarget {
 
   let generateArgs: [String!]! {
     ["generate"]
+  }
+
+  let subdirInitArgs: [String!]! {
+    ["module", "init", sdkInstallName, subdirModuleName]
+  }
+
+  let subdirPathInitArgs: [String!]! {
+    ["module", "init", sdkInstallName, subdirPathModuleName, "--path", subdirPathArg]
+  }
+
+  let subdirRootedPathInitArgs: [String!]! {
+    ["module", "init", sdkInstallName, subdirRootedModuleName, "--path", subdirRootedPathArg]
   }
 
   """
